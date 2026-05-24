@@ -1,12 +1,19 @@
+import { Link, useLocation } from 'react-router-dom';
+import './Navbar.css';
+
 function Navbar() {
+  const location = useLocation();
+
   return (
-    <nav>
-      <h2>Humanoid Farming</h2>
-      <ul>
-        <li><a href="/">Home</a></li>
-        <li><a href="/dataset">Dataset</a></li>
-        <li><a href="/tools">Tools</a></li>
-        <li><a href="/about">About</a></li>
+    <nav className="navbar">
+      <Link to="/" className="nav-logo">
+        <span>Humanoid <strong>Farming</strong></span>
+      </Link>
+      <ul className="nav-links">
+        <li><Link to="/" className={location.pathname === '/' ? 'active' : ''}>Home</Link></li>
+        <li><Link to="/dataset" className={location.pathname === '/dataset' ? 'active' : ''}>Dataset</Link></li>
+        <li><Link to="/tools" className={location.pathname === '/tools' ? 'active' : ''}>Tools</Link></li>
+        <li><Link to="/about" className={location.pathname === '/about' ? 'active' : ''}>About</Link></li>
       </ul>
     </nav>
   );
