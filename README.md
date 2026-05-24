@@ -2,6 +2,10 @@
 
 A web interface for the Humanoid Farming Pipeline — a research project at Middle Tennessee State University focused on converting farming demonstration videos into structured, robot-usable task sequences through multimodal AI.
 
+<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/557c52ff-9c29-414f-a070-d88740a80a1c" />
+<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/d088a832-f449-4194-ab86-c60792ee1cb5" />
+<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/40b6770a-939c-4fc4-8662-f2c8ca90a5f8" />
+
 ## Tech Stack
 
 - **Frontend:** React
