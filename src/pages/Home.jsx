@@ -1,6 +1,15 @@
+import { useState, useEffect } from 'react';
 import './Home.css';
 
 function Home() {
+  const [videos, setVideos] = useState([]);
+
+  useEffect(() => {
+    fetch('http://localhost:5000/api/videos')
+      .then(res => res.json())
+      .then(data => setVideos(data))
+      .catch(err => console.error('Error fetching videos:', err));
+  }, []);
   return (
     <>
       <div className="homeBanner">
@@ -20,6 +29,28 @@ function Home() {
         <div className='headerText'>
           <h2>Dataset</h2>
           <h3>Sample videos processed through the pipeline through extracted tasks.</h3>
+        </div>
+        <div className='table-container'>
+          <table>
+            <thead>
+              <tr>
+                <th>Video</th>
+                <th>Category</th>
+                <th>Tasks</th>
+                <th>Subtasks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {videos.map((video) => (
+                <tr key={video.video_id}>
+                  <td>{video.title}</td>
+                  <td><span className='category-tag'>{video.category}</span></td>
+                  <td>{video.tasks.length}</td>
+                  <td>{video.tasks.reduce((sum, t) => sum + t.subtasks.length, 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
