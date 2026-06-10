@@ -44,7 +44,7 @@ function Home() {
               {videos.map((video) => (
                 <tr key={video.video_id}>
                   <td>{video.title}</td>
-                  <td><span className='category-tag'>{video.category}</span></td>
+                  <td><span className='category-tag'>{video.category.charAt(0).toUpperCase() + video.category.slice(1)}</span></td>
                   <td>{video.task_count}</td>
                   <td>{video.subtask_count}</td>
                 </tr>

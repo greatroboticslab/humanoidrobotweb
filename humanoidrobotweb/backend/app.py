@@ -59,15 +59,34 @@ def load_data():
 
 @app.route("/api/videos", methods=["GET"])
 def get_videos():
-    """Return all videos (without heavy nested data)."""
+    """Return all videos with pipeline2 category data."""
+    # Build a lookup of pipeline2 categories per video
+    p2_lookup = {}
+    for p2 in pipeline2_collection.find({}, {"_id": 0, "video_id": 1, "blocks": 1, "num_blocks": 1}):
+        vid = p2.get("video_id")
+        blocks = p2.get("blocks", [])
+        # Get the most common dominant_category across blocks
+        cat_counts = {}
+        for block in blocks:
+            cat = block.get("dominant_category", "unknown")
+            cat_counts[cat] = cat_counts.get(cat, 0) + 1
+        top_category = max(cat_counts, key=cat_counts.get) if cat_counts else "unknown"
+        p2_lookup[vid] = {
+            "category": top_category,
+            "num_blocks": p2.get("num_blocks", len(blocks)),
+        }
+
     videos = []
-    for v in videos_collection.find({}, {"_id": 0, "video_id": 1, "title": 1, "category": 1, "url": 1, "tasks": 1}):
+    for v in videos_collection.find({}, {"_id": 0, "video_id": 1, "title": 1, "url": 1, "tasks": 1}):
+        vid = v.get("video_id")
         task_count = len(v.get("tasks", []))
         subtask_count = sum(len(t.get("subtasks", [])) for t in v.get("tasks", []))
+        p2 = p2_lookup.get(vid, {})
         videos.append({
-            "video_id": v.get("video_id"),
+            "video_id": vid,
             "title": v.get("title", "Unknown Title"),
-            "category": v.get("category", "Unknown"),
+            "category": p2.get("category", "unknown"),
+            "num_blocks": p2.get("num_blocks", 0),
             "url": v.get("url", ""),
             "task_count": task_count,
             "subtask_count": subtask_count,

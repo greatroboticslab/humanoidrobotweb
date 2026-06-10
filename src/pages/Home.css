@@ -74,13 +74,18 @@ h3 {
 /* Dataset Table */
 .table-container {
     max-width: 900px;
+    max-height: 500px;
     margin: 0 auto;
+    overflow-y: auto;
     overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid var(--gray-200);
 }
 
 table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     background: var(--white);
     border-radius: 12px;
     overflow: hidden;
@@ -99,6 +104,10 @@ th {
     font-weight: 600;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+    position: sticky;
+    top: 0;
+    background: var(--mtsu-blue);
+    z-index: 1;
 }
 
 td {
