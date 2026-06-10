@@ -1,0 +1,164 @@
+from flask import Flask, jsonify
+from flask_cors import CORS
+from pymongo import MongoClient
+import json
+import os
+
+app = Flask(__name__)
+CORS(app)
+
+# MongoDB connection
+client = MongoClient("mongodb://localhost:27017/")
+db = client["humanoidfarming"]
+videos_collection = db["videos"]
+pipeline2_collection = db["pipeline2"]
+
+# Data is included in the repo under backend/data/
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+TASKS_DIR = os.path.join(DATA_DIR, "tasks_with_timestamps")
+PIPELINE2_DIR = os.path.join(DATA_DIR, "pipeline2_blocks")
+
+
+def load_data():
+    """Load pipeline data into MongoDB if collections are empty."""
+
+    # Load tasks_with_timestamps (videos + tasks + subtasks)
+    if videos_collection.count_documents({}) == 0:
+        count = 0
+        for filename in os.listdir(TASKS_DIR):
+            if filename.endswith(".json"):
+                with open(os.path.join(TASKS_DIR, filename), "r") as f:
+                    try:
+                        data = json.load(f)
+                        data["video_id"] = data.pop("index", filename.replace(".json", ""))
+                        videos_collection.insert_one(data)
+                        count += 1
+                    except json.JSONDecodeError:
+                        pass
+        print(f"Loaded {count} videos into MongoDB.")
+    else:
+        print(f"Videos collection already has {videos_collection.count_documents({})} entries.")
+
+    # Load pipeline2 blocks (missions / sub-missions)
+    if pipeline2_collection.count_documents({}) == 0:
+        count = 0
+        for filename in os.listdir(PIPELINE2_DIR):
+            if filename.endswith(".json"):
+                with open(os.path.join(PIPELINE2_DIR, filename), "r") as f:
+                    try:
+                        data = json.load(f)
+                        data["video_id"] = data.pop("index", filename.replace(".json", ""))
+                        pipeline2_collection.insert_one(data)
+                        count += 1
+                    except json.JSONDecodeError:
+                        pass
+        print(f"Loaded {count} pipeline2 entries into MongoDB.")
+    else:
+        print(f"Pipeline2 collection already has {pipeline2_collection.count_documents({})} entries.")
+
+
+@app.route("/api/videos", methods=["GET"])
+def get_videos():
+    """Return all videos (without heavy nested data)."""
+    videos = []
+    for v in videos_collection.find({}, {"_id": 0, "video_id": 1, "title": 1, "category": 1, "url": 1, "tasks": 1}):
+        task_count = len(v.get("tasks", []))
+        subtask_count = sum(len(t.get("subtasks", [])) for t in v.get("tasks", []))
+        videos.append({
+            "video_id": v.get("video_id"),
+            "title": v.get("title", "Unknown Title"),
+            "category": v.get("category", "Unknown"),
+            "url": v.get("url", ""),
+            "task_count": task_count,
+            "subtask_count": subtask_count,
+        })
+    return jsonify(videos)
+
+
+@app.route("/api/videos/<video_id>", methods=["GET"])
+def get_video(video_id):
+    """Return a single video by ID with full details."""
+    video = videos_collection.find_one({"video_id": video_id}, {"_id": 0})
+    if video:
+        return jsonify(video)
+    return jsonify({"error": "Video not found"}), 404
+
+
+@app.route("/api/stats", methods=["GET"])
+def get_stats():
+    """Return dashboard statistics."""
+    # Video count
+    total_videos = videos_collection.count_documents({})
+
+    # Task and subtask counts
+    pipeline = videos_collection.aggregate([
+        {"$project": {
+            "task_count": {"$size": {"$ifNull": ["$tasks", []]}},
+            "subtask_count": {"$sum": {
+                "$map": {
+                    "input": {"$ifNull": ["$tasks", []]},
+                    "as": "task",
+                    "in": {"$size": {"$ifNull": ["$$task.subtasks", []]}}
+                }
+            }}
+        }},
+        {"$group": {
+            "_id": None,
+            "total_tasks": {"$sum": "$task_count"},
+            "total_subtasks": {"$sum": "$subtask_count"}
+        }}
+    ])
+    task_stats = list(pipeline)
+    total_tasks = task_stats[0]["total_tasks"] if task_stats else 0
+    total_subtasks = task_stats[0]["total_subtasks"] if task_stats else 0
+
+    # Mission and sub-mission counts from pipeline2
+    p2_pipeline = pipeline2_collection.aggregate([
+        {"$project": {
+            "block_count": {"$size": {"$ifNull": ["$blocks", []]}},
+            "sub_missions": {
+                "$size": {
+                    "$setUnion": {
+                        "$map": {
+                            "input": {"$ifNull": ["$blocks", []]},
+                            "as": "block",
+                            "in": {"$ifNull": ["$$block.sub_mission_id", "unknown"]}
+                        }
+                    }
+                }
+            }
+        }},
+        {"$group": {
+            "_id": None,
+            "total_blocks": {"$sum": "$block_count"},
+            "total_sub_missions": {"$sum": "$sub_missions"}
+        }}
+    ])
+    p2_stats = list(p2_pipeline)
+    total_blocks = p2_stats[0]["total_blocks"] if p2_stats else 0
+    total_sub_missions = p2_stats[0]["total_sub_missions"] if p2_stats else 0
+
+    # Category distribution from pipeline2
+    cat_pipeline = pipeline2_collection.aggregate([
+        {"$unwind": "$blocks"},
+        {"$group": {
+            "_id": "$blocks.dominant_category",
+            "count": {"$sum": 1}
+        }},
+        {"$sort": {"count": -1}}
+    ])
+    categories = {doc["_id"]: doc["count"] for doc in cat_pipeline if doc["_id"]}
+
+    return jsonify({
+        "total_videos": total_videos,
+        "total_tasks": total_tasks,
+        "total_subtasks": total_subtasks,
+        "total_blocks": total_blocks,
+        "total_sub_missions": total_sub_missions,
+        "categories": categories,
+    })
+
+
+if __name__ == "__main__":
+    load_data()
+    app.run(debug=True, port=5000)

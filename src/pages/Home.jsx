@@ -45,8 +45,8 @@ function Home() {
                 <tr key={video.video_id}>
                   <td>{video.title}</td>
                   <td><span className='category-tag'>{video.category}</span></td>
-                  <td>{video.tasks.length}</td>
-                  <td>{video.tasks.reduce((sum, t) => sum + t.subtasks.length, 0)}</td>
+                  <td>{video.task_count}</td>
+                  <td>{video.subtask_count}</td>
                 </tr>
               ))}
             </tbody>
