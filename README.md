@@ -27,7 +27,9 @@ src/
 backend/
   app.py              # Flask API server
   requirements.txt    # Python dependencies
-  data/               # Sample JSON data files
+  data/
+    tasks_with_timestamps/   # 567 video task files from pipeline
+    pipeline2_blocks/        # 527 pipeline2 structured data files
 ```
 
 ## Setup
@@ -65,11 +67,20 @@ Make sure MongoDB is running locally:
 brew services start mongodb-community
 ```
 
-The backend automatically loads sample data into MongoDB on first run.
+The backend automatically loads all pipeline data (567 videos, 527 pipeline2 blocks) into MongoDB on first run.
+
+To reload the data from scratch, drop the collections first:
+
+```bash
+mongosh --eval 'use humanoidfarming; db.videos.drop(); db.pipeline2.drop()'
+```
+
+Then restart the backend.
 
 ## API Endpoints
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/api/videos` | Returns all videos |
-| GET | `/api/videos/<video_id>` | Returns a single video by ID |
+| GET | `/api/videos` | Returns all videos with task/subtask counts |
+| GET | `/api/videos/<video_id>` | Returns a single video by ID with full details |
+| GET | `/api/stats` | Returns dashboard statistics (totals, categories) |
