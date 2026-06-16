@@ -3,12 +3,18 @@ import './Home.css';
 
 function Home() {
   const [videos, setVideos] = useState([]);
+  const [stats, setStats] = useState(null);
 
   useEffect(() => {
     fetch('http://localhost:5000/api/videos')
       .then(res => res.json())
       .then(data => setVideos(data))
       .catch(err => console.error('Error fetching videos:', err));
+
+    fetch('http://localhost:5000/api/stats')
+      .then(res => res.json())
+      .then(data => setStats(data))
+      .catch(err => console.error('Error fetching stats:', err));
   }, []);
   return (
     <>
@@ -24,6 +30,31 @@ function Home() {
           <button className="viewToolsBtn">View Tools</button>
         </div>
       </div>
+
+      {stats && (
+        <div className="stats-bar">
+          <div className="stat-card">
+            <span className="stat-number">{stats.total_videos.toLocaleString()}</span>
+            <span className="stat-label">Videos</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-number">{stats.total_tasks.toLocaleString()}</span>
+            <span className="stat-label">Tasks</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-number">{stats.total_subtasks.toLocaleString()}</span>
+            <span className="stat-label">Subtasks</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-number">{stats.total_blocks.toLocaleString()}</span>
+            <span className="stat-label">Blocks</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-number">{Object.keys(stats.categories).length}</span>
+            <span className="stat-label">Categories</span>
+          </div>
+        </div>
+      )}
 
       <div className='datasetBanner'>
         <div className='headerText'>
