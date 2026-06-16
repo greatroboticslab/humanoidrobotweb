@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import './Home.css';
 
 function Home() {
@@ -72,7 +73,7 @@ function Home() {
               </tr>
             </thead>
             <tbody>
-              {videos.map((video) => (
+              {videos.slice(0, 8).map((video) => (
                 <tr key={video.video_id}>
                   <td>{video.title}</td>
                   <td><span className='category-tag'>{video.category.charAt(0).toUpperCase() + video.category.slice(1)}</span></td>
@@ -83,6 +84,7 @@ function Home() {
             </tbody>
           </table>
         </div>
+        <Link to="/dataset" className="view-dataset-btn">View Full Dataset</Link>
       </div>
 
       <div className='toolsBanner'>

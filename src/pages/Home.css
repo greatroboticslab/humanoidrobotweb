@@ -105,12 +105,27 @@ h3 {
 /* Dataset Table */
 .table-container {
     max-width: 900px;
-    max-height: 500px;
     margin: 0 auto;
-    overflow-y: auto;
-    overflow-x: auto;
     border-radius: 12px;
     border: 1px solid var(--gray-200);
+    overflow: hidden;
+}
+
+.view-dataset-btn {
+    display: inline-block;
+    margin-top: 24px;
+    padding: 10px 24px;
+    background: var(--mtsu-blue);
+    color: var(--white);
+    border-radius: 8px;
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.view-dataset-btn:hover {
+    background: var(--mtsu-blue-dark);
 }
 
 table {
