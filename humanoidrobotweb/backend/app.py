@@ -96,11 +96,19 @@ def get_videos():
 
 @app.route("/api/videos/<video_id>", methods=["GET"])
 def get_video(video_id):
-    """Return a single video by ID with full details."""
+    """Return a single video by ID with tasks and pipeline2 data."""
     video = videos_collection.find_one({"video_id": video_id}, {"_id": 0})
-    if video:
-        return jsonify(video)
-    return jsonify({"error": "Video not found"}), 404
+    if not video:
+        return jsonify({"error": "Video not found"}), 404
+
+    # include pipeline2 data for tree chart
+    p2 = pipeline2_collection.find_one({"video_id": video_id}, {"_id": 0})
+    if p2:
+        video["mission_title"] = p2.get("mission_title", "")
+        video["sub_missions"] = p2.get("sub_missions", [])
+        video["blocks"] = p2.get("blocks", [])
+
+    return jsonify(video)
 
 
 @app.route("/api/stats", methods=["GET"])

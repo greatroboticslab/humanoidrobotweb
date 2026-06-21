@@ -1,0 +1,197 @@
+/* video detail page */
+.video-detail {
+    padding: 40px 48px;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: var(--mtsu-blue);
+    text-decoration: none;
+    margin-bottom: 24px;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+
+/* video header */
+.video-header {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 40px;
+}
+
+.video-header-thumbnail {
+    width: 320px;
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+
+.video-header-info {
+    flex: 1;
+}
+
+.video-header-info h2 {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+}
+
+.video-header-info .category-tag {
+    display: inline-block;
+    background: var(--mtsu-blue-light);
+    color: var(--mtsu-blue);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+
+.video-meta {
+    display: flex;
+    gap: 20px;
+    font-size: 14px;
+    color: var(--gray-500);
+    margin-bottom: 12px;
+}
+
+.youtube-link {
+    font-size: 14px;
+    color: var(--mtsu-blue);
+    text-decoration: none;
+}
+
+.youtube-link:hover {
+    text-decoration: underline;
+}
+
+/* tree chart */
+.tree-section {
+    margin-top: 32px;
+}
+
+.tree-section > h3 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 20px 0;
+}
+
+.tree-container {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 24px;
+}
+
+.tree-node {
+    margin-bottom: 2px;
+}
+
+.tree-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--gray-900);
+}
+
+.tree-label:hover {
+    background: var(--gray-100);
+}
+
+.tree-toggle {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--gray-500);
+    flex-shrink: 0;
+    transition: transform 0.2s;
+}
+
+.tree-toggle.expanded {
+    transform: rotate(90deg);
+}
+
+.tree-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.tree-icon.mission {
+    background: #0066CC;
+    color: white;
+}
+
+.tree-icon.sub-mission {
+    background: #3399FF;
+    color: white;
+}
+
+.tree-icon.task {
+    background: #69B3E7;
+    color: white;
+}
+
+.tree-icon.subtask {
+    background: var(--mtsu-blue-light);
+    color: var(--mtsu-blue);
+}
+
+.tree-icon.block {
+    background: #004C99;
+    color: white;
+}
+
+.tree-text {
+    flex: 1;
+    line-height: 1.4;
+}
+
+.tree-timestamp {
+    font-size: 11px;
+    color: var(--gray-500);
+    flex-shrink: 0;
+}
+
+.tree-children {
+    margin-left: 34px;
+    border-left: 2px solid var(--gray-200);
+    padding-left: 12px;
+}
+
+.tree-category-tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--mtsu-blue-light);
+    color: var(--mtsu-blue);
+    flex-shrink: 0;
+}
+
+/* loading */
+.loading {
+    text-align: center;
+    padding: 80px 0;
+    font-size: 16px;
+    color: var(--gray-500);
+}
