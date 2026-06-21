@@ -162,7 +162,31 @@
     cursor: default;
 }
 
-.pagination-info {
+.page-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    background: var(--white);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--gray-700);
+    cursor: pointer;
+}
+
+.page-btn:hover {
+    border-color: var(--mtsu-blue);
+    color: var(--mtsu-blue);
+}
+
+.page-btn.active {
+    background: var(--mtsu-blue);
+    color: var(--white);
+    border-color: var(--mtsu-blue);
+}
+
+.pagination-dots {
     font-size: 14px;
     color: var(--gray-500);
 }
