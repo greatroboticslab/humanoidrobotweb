@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import './Home.css';
+
+// mtsu blue palette for chart colors
+const CHART_COLORS = ['#0066CC', '#3399FF', '#69B3E7', '#004C99'];
 
 function Home() {
   const [videos, setVideos] = useState([]);
   const [stats, setStats] = useState(null);
 
+  // fetch video list and stats on mount
   useEffect(() => {
     fetch('http://localhost:5000/api/videos')
       .then(res => res.json())
@@ -17,21 +22,22 @@ function Home() {
       .then(data => setStats(data))
       .catch(err => console.error('Error fetching stats:', err));
   }, []);
+
   return (
     <>
+      {/* hero banner */}
       <div className="homeBanner">
-
         <div className='headerText'>
           <h1>Humanoid Farming Pipeline</h1>
           <h3>Converting farming demonstration videos into structured, robot-usable task sequences through multimodal AI.</h3>
         </div>
-
         <div className="homeBannerBtns">
           <button className="exploreDatasetBtn">Explore Dataset</button>
           <button className="viewToolsBtn">View Tools</button>
         </div>
       </div>
 
+      {/* stats bar, totals from /api/stats */}
       {stats && (
         <div className="stats-bar">
           <div className="stat-card">
@@ -57,6 +63,76 @@ function Home() {
         </div>
       )}
 
+      {/* charts section, bar chart and pie chart side by side */}
+      {stats && stats.categories && (() => {
+        // convert categories object to sorted array for recharts
+        const categoryData = Object.entries(stats.categories)
+          .map(([name, value]) => ({
+            name: name.charAt(0).toUpperCase() + name.slice(1),
+            value,
+          }))
+          .sort((a, b) => b.value - a.value);
+        const total = categoryData.reduce((sum, d) => sum + d.value, 0);
+
+        return (
+          <div className="charts-section">
+            <div className="headerText">
+              <h2>Pipeline Statistics</h2>
+              <h3>Each farming video is split into smaller segments called blocks. Every block is classified into a category based on what's happening; whether someone is narrating, planning, perceiving their environment, or performing a physical motion.</h3>
+            </div>
+            <div className="charts-container">
+              {/* bar chart, block count per category */}
+              <div className="chart-card">
+                <h4>Blocks by Category</h4>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={categoryData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                    <XAxis dataKey="name" tick={{ fontSize: 13 }} />
+                    <YAxis tick={{ fontSize: 13 }} />
+                    <Tooltip />
+                    <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                      {categoryData.map((entry, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* pie chart, category percentages */}
+              <div className="chart-card">
+                <h4>Category Distribution</h4>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={categoryData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      label={({ name, value, x, y, textAnchor }) => (
+                        <text x={x} y={y + 6} textAnchor={textAnchor} fill="#374151" fontSize={12}>
+                          <tspan x={x} dy="0">{name}</tspan>
+                          <tspan x={x} dy="14">{`(${((value / total) * 100).toFixed(1)}%)`}</tspan>
+                        </text>
+                      )}
+                      labelLine={{ strokeWidth: 1 }}
+                    >
+                      {categoryData.map((entry, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* dataset preview, first 8 videos */}
       <div className='datasetBanner'>
         <div className='headerText'>
           <h2>Dataset</h2>
@@ -87,6 +163,7 @@ function Home() {
         <Link to="/dataset" className="view-dataset-btn">View Full Dataset</Link>
       </div>
 
+      {/* tools section */}
       <div className='toolsBanner'>
         <div className='headerText'>
           <h2>Tools</h2>
@@ -145,6 +222,7 @@ function Home() {
         </div>
       </div>
 
+      {/* about section */}
       <div className='about-banner'>
         <div className='headerText'>
           <h2>About</h2>

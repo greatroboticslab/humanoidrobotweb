@@ -96,8 +96,38 @@ h3 {
     letter-spacing: 0.5px;
 }
 
-.datasetBanner {
+/* charts */
+.charts-section {
+    padding: 60px 48px;
+    text-align: center;
     background: #F2F2F2;
+}
+
+.charts-container {
+    display: flex;
+    gap: 30px;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.chart-card {
+    flex: 1;
+    background: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: 16px;
+    padding: 24px;
+    overflow: visible;
+    min-width: 0;
+}
+
+.chart-card h4 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 16px 0;
+    color: var(--gray-700);
+}
+
+.datasetBanner {
     padding: 60px 48px;
     text-align: center;
 }
