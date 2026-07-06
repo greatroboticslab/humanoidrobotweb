@@ -13,7 +13,7 @@ function Dataset() {
 
   // fetch all videos on mount
   useEffect(() => {
-    fetch('http://localhost:5000/api/videos')
+    fetch('/api/videos')
       .then(res => res.json())
       .then(data => setVideos(data))
       .catch(err => console.error('Error fetching videos:', err));

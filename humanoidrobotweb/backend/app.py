@@ -11,6 +11,7 @@ CORS(app)
 client = MongoClient("mongodb://localhost:27017/")
 db = client["humanoidfarming"]
 videos_collection = db["videos"]
+pipeline1_collection = db["pipeline1"]
 pipeline2_collection = db["pipeline2"]
 
 # Data is included in the repo under backend/data/
@@ -108,6 +109,11 @@ def get_video(video_id):
         video["sub_missions"] = p2.get("sub_missions", [])
         video["blocks"] = p2.get("blocks", [])
 
+    # include pipeline1 robot guidance data
+    p1 = pipeline1_collection.find_one({"video_id": video_id}, {"_id": 0})
+    if p1:
+        video["pipeline1_tasks"] = p1.get("tasks", [])
+
     return jsonify(video)
 
 
@@ -176,6 +182,50 @@ def get_stats():
     ])
     categories = {doc["_id"]: doc["count"] for doc in cat_pipeline if doc["_id"]}
 
+    # Pipeline 1 stats
+    p1_videos = pipeline1_collection.count_documents({})
+    p1_pipeline = pipeline1_collection.aggregate([
+        {"$project": {
+            "task_count": {"$size": {"$ifNull": ["$tasks", []]}},
+            "subtask_count": {"$sum": {
+                "$map": {
+                    "input": {"$ifNull": ["$tasks", []]},
+                    "as": "task",
+                    "in": {"$size": {"$ifNull": ["$$task.subtasks", []]}}
+                }
+            }},
+            "frame_count": {"$sum": {
+                "$map": {
+                    "input": {"$ifNull": ["$tasks", []]},
+                    "as": "task",
+                    "in": {"$sum": {
+                        "$map": {
+                            "input": {"$ifNull": ["$$task.subtasks", []]},
+                            "as": "sub",
+                            "in": {"$size": {"$ifNull": ["$$sub.frames", []]}}
+                        }
+                    }}
+                }
+            }}
+        }},
+        {"$group": {
+            "_id": None,
+            "total_tasks": {"$sum": "$task_count"},
+            "total_subtasks": {"$sum": "$subtask_count"},
+            "total_frames": {"$sum": "$frame_count"}
+        }}
+    ])
+    p1_stats = list(p1_pipeline)
+
+    # Pipeline 1 action type distribution
+    p1_action_counts = {"navigation": 0, "perception": 0, "manipulation": 0, "communication": 0, "verification": 0}
+    for doc in pipeline1_collection.find({}, {"tasks": 1}):
+        for task in doc.get("tasks", []):
+            for sub in task.get("subtasks", []):
+                steps = sub.get("guidance", {}).get("ordered_robot_action_steps", "")
+                for atype in p1_action_counts:
+                    p1_action_counts[atype] += steps.count(f"type={atype}")
+
     return jsonify({
         "total_videos": total_videos,
         "total_tasks": total_tasks,
@@ -183,6 +233,13 @@ def get_stats():
         "total_blocks": total_blocks,
         "total_sub_missions": total_sub_missions,
         "categories": categories,
+        "pipeline1": {
+            "total_videos": p1_videos,
+            "total_tasks": p1_stats[0]["total_tasks"] if p1_stats else 0,
+            "total_subtasks": p1_stats[0]["total_subtasks"] if p1_stats else 0,
+            "total_frames": p1_stats[0]["total_frames"] if p1_stats else 0,
+            "action_types": p1_action_counts,
+        }
     })
 
 

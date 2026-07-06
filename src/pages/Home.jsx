@@ -12,12 +12,12 @@ function Home() {
 
   // fetch video list and stats on mount
   useEffect(() => {
-    fetch('http://localhost:5000/api/videos')
+    fetch('/api/videos')
       .then(res => res.json())
       .then(data => setVideos(data))
       .catch(err => console.error('Error fetching videos:', err));
 
-    fetch('http://localhost:5000/api/stats')
+    fetch('/api/stats')
       .then(res => res.json())
       .then(data => setStats(data))
       .catch(err => console.error('Error fetching stats:', err));

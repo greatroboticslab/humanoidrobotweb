@@ -43,7 +43,7 @@ function VideoDetail() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`http://localhost:5000/api/videos/${videoId}`)
+    fetch(`/api/videos/${videoId}`)
       .then(res => res.json())
       .then(data => {
         setVideo(data);
