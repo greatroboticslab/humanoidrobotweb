@@ -5,6 +5,7 @@ import './Home.css';
 
 // mtsu blue palette for chart colors
 const CHART_COLORS = ['#0066CC', '#3399FF', '#69B3E7', '#004C99'];
+const P1_COLORS = ['#004C99', '#0066CC', '#3399FF', '#69B3E7', '#99CCF3'];
 
 function Home() {
   const [videos, setVideos] = useState([]);
@@ -42,28 +43,28 @@ function Home() {
         <div className="stats-bar">
           <div className="stat-card">
             <span className="stat-number">{stats.total_videos.toLocaleString()}</span>
-            <span className="stat-label">Videos</span>
+            <span className="stat-label">Videos Processed</span>
           </div>
           <div className="stat-card">
             <span className="stat-number">{stats.total_tasks.toLocaleString()}</span>
-            <span className="stat-label">Tasks</span>
+            <span className="stat-label">Tasks Extracted</span>
           </div>
           <div className="stat-card">
             <span className="stat-number">{stats.total_subtasks.toLocaleString()}</span>
             <span className="stat-label">Subtasks</span>
           </div>
           <div className="stat-card">
-            <span className="stat-number">{stats.total_blocks.toLocaleString()}</span>
-            <span className="stat-label">Blocks</span>
+            <span className="stat-number">{stats.pipeline1?.total_frames?.toLocaleString() || '0'}</span>
+            <span className="stat-label">Frames Extracted</span>
           </div>
           <div className="stat-card">
-            <span className="stat-number">{Object.keys(stats.categories).length}</span>
-            <span className="stat-label">Categories</span>
+            <span className="stat-number">{stats.total_blocks.toLocaleString()}</span>
+            <span className="stat-label">Coherent Blocks</span>
           </div>
         </div>
       )}
 
-      {/* charts section, bar chart and pie chart side by side */}
+      {/* pipeline 2 charts section */}
       {stats && stats.categories && (() => {
         // convert categories object to sorted array for recharts
         const categoryData = Object.entries(stats.categories)
@@ -77,11 +78,29 @@ function Home() {
         return (
           <div className="charts-section">
             <div className="headerText">
-              <h2>Pipeline Statistics</h2>
+              <span className="pipeline-label">Pipeline 2</span>
+              <h2>Structured Task Dataset</h2>
               <h3>Each farming video is split into smaller segments called blocks. Every block is classified into a category based on what's happening; whether someone is narrating, planning, perceiving their environment, or performing a physical motion.</h3>
             </div>
+            <div className="pipeline-stats-row">
+              <div className="pipeline-stat">
+                <span className="pipeline-stat-number">{stats.total_videos.toLocaleString()}</span>
+                <span className="pipeline-stat-label">Videos</span>
+              </div>
+              <div className="pipeline-stat">
+                <span className="pipeline-stat-number">{stats.total_blocks.toLocaleString()}</span>
+                <span className="pipeline-stat-label">Blocks</span>
+              </div>
+              <div className="pipeline-stat">
+                <span className="pipeline-stat-number">{stats.total_sub_missions.toLocaleString()}</span>
+                <span className="pipeline-stat-label">Sub-missions</span>
+              </div>
+              <div className="pipeline-stat">
+                <span className="pipeline-stat-number">{Object.keys(stats.categories).length}</span>
+                <span className="pipeline-stat-label">Categories</span>
+              </div>
+            </div>
             <div className="charts-container">
-              {/* bar chart, block count per category */}
               <div className="chart-card">
                 <h4>Blocks by Category</h4>
                 <ResponsiveContainer width="100%" height={300}>
@@ -99,7 +118,6 @@ function Home() {
                 </ResponsiveContainer>
               </div>
 
-              {/* pie chart, category percentages */}
               <div className="chart-card">
                 <h4>Category Distribution</h4>
                 <ResponsiveContainer width="100%" height={300}>
@@ -121,6 +139,92 @@ function Home() {
                     >
                       {categoryData.map((entry, i) => (
                         <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* pipeline 1 charts section */}
+      {stats && stats.pipeline1 && (() => {
+        const p1 = stats.pipeline1;
+        const actionData = Object.entries(p1.action_types)
+          .map(([name, value]) => ({
+            name: name.charAt(0).toUpperCase() + name.slice(1),
+            value,
+          }))
+          .sort((a, b) => b.value - a.value);
+        const actionTotal = actionData.reduce((sum, d) => sum + d.value, 0);
+
+        return (
+          <div className="charts-section">
+            <div className="headerText">
+              <span className="pipeline-label">Pipeline 1</span>
+              <h2>Robot Guidance Generation</h2>
+              <h3>Each subtask is converted into structured robot instructions with frame captions, preconditions, ordered action steps, and success criteria. Actions are classified by type: navigation, perception, manipulation, communication, or verification.</h3>
+            </div>
+            <div className="pipeline-stats-row">
+              <div className="pipeline-stat">
+                <span className="pipeline-stat-number">{p1.total_videos.toLocaleString()}</span>
+                <span className="pipeline-stat-label">Videos</span>
+              </div>
+              <div className="pipeline-stat">
+                <span className="pipeline-stat-number">{p1.total_tasks.toLocaleString()}</span>
+                <span className="pipeline-stat-label">Tasks</span>
+              </div>
+              <div className="pipeline-stat">
+                <span className="pipeline-stat-number">{p1.total_subtasks.toLocaleString()}</span>
+                <span className="pipeline-stat-label">Subtasks</span>
+              </div>
+              <div className="pipeline-stat">
+                <span className="pipeline-stat-number">{p1.total_frames.toLocaleString()}</span>
+                <span className="pipeline-stat-label">Frames</span>
+              </div>
+            </div>
+            <div className="charts-container">
+              <div className="chart-card">
+                <h4>Actions by Type</h4>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={actionData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                    <XAxis dataKey="name" tick={{ fontSize: 13 }} />
+                    <YAxis tick={{ fontSize: 13 }} />
+                    <Tooltip />
+                    <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                      {actionData.map((entry, i) => (
+                        <Cell key={i} fill={P1_COLORS[i % P1_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="chart-card">
+                <h4>Action Type Distribution</h4>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={actionData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      label={({ name, value, x, y, textAnchor }) => (
+                        <text x={x} y={y + 6} textAnchor={textAnchor} fill="#374151" fontSize={12}>
+                          <tspan x={x} dy="0">{name}</tspan>
+                          <tspan x={x} dy="14">{`(${((value / actionTotal) * 100).toFixed(1)}%)`}</tspan>
+                        </text>
+                      )}
+                      labelLine={{ strokeWidth: 1 }}
+                    >
+                      {actionData.map((entry, i) => (
+                        <Cell key={i} fill={P1_COLORS[i % P1_COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip />

@@ -157,6 +157,78 @@ function VideoDetail() {
           </div>
         </div>
       )}
+
+      {/* pipeline 1: robot guidance */}
+      {video.pipeline1_tasks && video.pipeline1_tasks.length > 0 && (
+        <div className="tree-section">
+          <h3>
+            <span className="pipeline-badge">Pipeline 1</span>
+            Robot Guidance
+          </h3>
+          <div className="guidance-list">
+            {video.pipeline1_tasks.map((task, i) => (
+              <div key={i} className="guidance-task">
+                <div className="guidance-task-header" onClick={(e) => {
+                  const el = e.currentTarget.nextElementSibling;
+                  const arrow = e.currentTarget.querySelector('.guidance-arrow');
+                  if (el.style.display === 'none') {
+                    el.style.display = 'block';
+                    arrow.classList.add('expanded');
+                  } else {
+                    el.style.display = 'none';
+                    arrow.classList.remove('expanded');
+                  }
+                }}>
+                  <span className="guidance-arrow">&#9654;</span>
+                  <span className="guidance-task-title">Task {i + 1}: {task.task}</span>
+                  <span className="guidance-count">{(task.subtasks || []).length} subtasks</span>
+                </div>
+                <div style={{ display: 'none' }}>
+                  {(task.subtasks || []).map((sub, j) => {
+                    const g = sub.guidance || {};
+                    return (
+                      <div key={j} className="guidance-subtask">
+                        <div className="guidance-subtask-header">{sub.text}</div>
+                        {sub.frames && sub.frames.length > 0 && (
+                          <span className="guidance-frames">{sub.frames.length} frames</span>
+                        )}
+
+                        {g.global_summary && (
+                          <div className="guidance-field">
+                            <div className="guidance-field-label">Summary</div>
+                            <div className="guidance-field-value">{g.global_summary}</div>
+                          </div>
+                        )}
+
+                        {g.preconditions_for_robot && (
+                          <div className="guidance-field">
+                            <div className="guidance-field-label">Preconditions</div>
+                            <div className="guidance-field-value">{g.preconditions_for_robot}</div>
+                          </div>
+                        )}
+
+                        {g.ordered_robot_action_steps && (
+                          <div className="guidance-field">
+                            <div className="guidance-field-label">Action Steps</div>
+                            <div className="guidance-field-value guidance-steps">{g.ordered_robot_action_steps}</div>
+                          </div>
+                        )}
+
+                        {g.success_criteria && (
+                          <div className="guidance-field">
+                            <div className="guidance-field-label">Success Criteria</div>
+                            <div className="guidance-field-value">{g.success_criteria}</div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
