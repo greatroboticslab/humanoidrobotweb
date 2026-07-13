@@ -77,6 +77,19 @@ mongosh --eval 'use humanoidfarming; db.videos.drop(); db.pipeline2.drop()'
 
 Then restart the backend.
 
+### Transferring MongoDB between machines
+
+To move the database from one machine to another (e.g. Mac to Linux server):
+
+```bash
+# on the source machine - exports to ./mongo_dump/
+cd backend
+bash mongo_transfer.sh export
+
+# copy mongo_dump/ to the other machine, then:
+bash mongo_transfer.sh import
+```
+
 ## API Endpoints
 
 | Method | Route | Description |
