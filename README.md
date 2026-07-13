@@ -17,18 +17,21 @@ A web interface for the Humanoid Farming Pipeline — a research project at Midd
 ```
 src/
   components/
-    Navbar.jsx        # Navigation bar
-    Footer.jsx        # Page footer
+    Navbar.jsx            # Navigation bar
+    Footer.jsx            # Page footer
   pages/
-    Home.jsx          # Home page with hero, dataset table, tools, and about sections
+    Home.jsx              # Homepage with stats, Pipeline 1 and Pipeline 2 charts
+    Dataset.jsx           # Searchable/filterable video grid with pagination
+    VideoDetail.jsx       # Video detail with mission tree, task tree, and robot guidance
   styles/
-    variables.css     # Global CSS variables (MTSU colors)
+    variables.css         # Global CSS variables (MTSU colors)
 
 backend/
-  app.py              # Flask API server
-  requirements.txt    # Python dependencies
+  app.py                  # Flask API server
+  mongo_transfer.sh       # MongoDB export/import script for transferring between machines
+  requirements.txt        # Python dependencies
   data/
-    tasks_with_timestamps/   # 567 video task files from pipeline
+    tasks_with_timestamps/   # 567 video task files
     pipeline2_blocks/        # 527 pipeline2 structured data files
 ```
 
@@ -94,6 +97,6 @@ bash mongo_transfer.sh import
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/api/videos` | Returns all videos with task/subtask counts |
-| GET | `/api/videos/<video_id>` | Returns a single video by ID with full details |
-| GET | `/api/stats` | Returns dashboard statistics (totals, categories) |
+| GET | `/api/videos` | Returns all videos with task/subtask counts and categories |
+| GET | `/api/videos/<video_id>` | Returns a single video with Pipeline 1 (robot guidance) and Pipeline 2 (missions, blocks) data |
+| GET | `/api/stats` | Returns dashboard statistics for both pipelines (totals, categories, action types) |
