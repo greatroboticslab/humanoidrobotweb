@@ -11,9 +11,9 @@ function formatTime(seconds) {
 }
 
 // collapsible tree node component
-function TreeNode({ icon, iconClass, label, timestamp, tag, children }) {
+function TreeNode({ icon, iconClass, label, timestamp, tag, detail, children }) {
   const [expanded, setExpanded] = useState(false);
-  const hasChildren = children && children.length > 0;
+  const hasChildren = (children && children.length > 0) || detail;
 
   return (
     <div className="tree-node">
@@ -28,8 +28,9 @@ function TreeNode({ icon, iconClass, label, timestamp, tag, children }) {
         {tag && <span className="tree-category-tag">{tag}</span>}
         {timestamp && <span className="tree-timestamp">{timestamp}</span>}
       </div>
-      {expanded && hasChildren && (
+      {expanded && (
         <div className="tree-children">
+          {detail && <div className="block-detail">{detail}</div>}
           {children}
         </div>
       )}
@@ -114,16 +115,67 @@ function VideoDetail() {
                   iconClass="sub-mission"
                   label={sm.sub_mission_title}
                   timestamp={`${formatTime(sm.time_start)} - ${formatTime(sm.time_end)}`}
-                  children={(blocksBySubMission[sm.sub_mission_id] || []).map(block => (
-                    <TreeNode
-                      key={block.block_id}
-                      icon="B"
-                      iconClass="block"
-                      label={block.block_preview_text || `Block ${block.block_id}`}
-                      tag={block.dominant_category?.charAt(0).toUpperCase() + block.dominant_category?.slice(1)}
-                      timestamp={`${formatTime(block.time_start)} - ${formatTime(block.time_end)}`}
-                    />
-                  ))}
+                  children={(blocksBySubMission[sm.sub_mission_id] || []).map(block => {
+                    const catDist = block.category_distribution || {};
+                    const catTotal = Object.values(catDist).reduce((s, v) => s + v, 0) || 1;
+                    const subtaskRefs = (block.subtask_refs || []).map(ref => {
+                      const task = (video.tasks || [])[ref.task_index];
+                      const sub = task?.subtasks?.[ref.sub_index];
+                      return sub?.text;
+                    }).filter(Boolean);
+
+                    return (
+                      <TreeNode
+                        key={block.block_id}
+                        icon="B"
+                        iconClass="block"
+                        label={block.block_preview_text?.slice(0, 80) + (block.block_preview_text?.length > 80 ? '...' : '') || `Block ${block.block_id}`}
+                        tag={block.dominant_category?.charAt(0).toUpperCase() + block.dominant_category?.slice(1)}
+                        timestamp={`${formatTime(block.time_start)} - ${formatTime(block.time_end)}`}
+                        detail={
+                          <>
+                            {block.block_preview_text && (
+                              <div className="block-detail-section">
+                                <div className="block-detail-label">Full Text</div>
+                                <div className="block-detail-text">{block.block_preview_text}</div>
+                              </div>
+                            )}
+                            {Object.keys(catDist).length > 0 && (
+                              <div className="block-detail-section">
+                                <div className="block-detail-label">Category Breakdown</div>
+                                <div className="block-cat-bars">
+                                  {Object.entries(catDist)
+                                    .sort((a, b) => b[1] - a[1])
+                                    .map(([cat, count]) => (
+                                      <div key={cat} className="block-cat-row">
+                                        <span className="block-cat-name">{cat.charAt(0).toUpperCase() + cat.slice(1)}</span>
+                                        <div className="block-cat-bar-bg">
+                                          <div
+                                            className="block-cat-bar-fill"
+                                            style={{ width: `${(count / catTotal) * 100}%` }}
+                                          />
+                                        </div>
+                                        <span className="block-cat-pct">{Math.round((count / catTotal) * 100)}%</span>
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+                            {subtaskRefs.length > 0 && (
+                              <div className="block-detail-section">
+                                <div className="block-detail-label">Linked Subtasks</div>
+                                <ul className="block-subtask-list">
+                                  {subtaskRefs.map((text, i) => (
+                                    <li key={i}>{text}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </>
+                        }
+                      />
+                    );
+                  })}
                 />
               ))}
             />
