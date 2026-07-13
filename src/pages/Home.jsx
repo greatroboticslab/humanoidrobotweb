@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import './Home.css';
 
@@ -8,6 +8,7 @@ const CHART_COLORS = ['#0066CC', '#3399FF', '#69B3E7', '#004C99'];
 const P1_COLORS = ['#004C99', '#0066CC', '#3399FF', '#69B3E7', '#99CCF3'];
 
 function Home() {
+  const navigate = useNavigate();
   const [videos, setVideos] = useState([]);
   const [stats, setStats] = useState(null);
 
@@ -33,8 +34,8 @@ function Home() {
           <h3>Converting farming demonstration videos into structured, robot-usable task sequences through multimodal AI.</h3>
         </div>
         <div className="homeBannerBtns">
-          <button className="exploreDatasetBtn">Explore Dataset</button>
-          <button className="viewToolsBtn">View Tools</button>
+          <button className="exploreDatasetBtn" onClick={() => navigate('/dataset')}>Explore Dataset</button>
+          <button className="viewToolsBtn" onClick={() => document.querySelector('.toolsBanner').scrollIntoView({ behavior: 'smooth' })}>View Tools</button>
         </div>
       </div>
 
