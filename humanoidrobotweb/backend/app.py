@@ -1,8 +1,11 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from pymongo import MongoClient
+from datetime import datetime, timezone
+from werkzeug.utils import secure_filename
 import json
 import os
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -13,11 +16,14 @@ db = client["humanoidfarming"]
 videos_collection = db["videos"]
 pipeline1_collection = db["pipeline1"]
 pipeline2_collection = db["pipeline2"]
+comments_collection = db["comments"]
 
 # Data is included in the repo under backend/data/
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 TASKS_DIR = os.path.join(DATA_DIR, "tasks_with_timestamps")
 PIPELINE2_DIR = os.path.join(DATA_DIR, "pipeline2_blocks")
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 def load_data():
@@ -241,6 +247,48 @@ def get_stats():
             "action_types": p1_action_counts,
         }
     })
+
+
+@app.route("/api/videos/<video_id>/comments", methods=["GET"])
+def get_comments(video_id):
+    comments = list(comments_collection.find(
+        {"video_id": video_id}, {"_id": 0}
+    ).sort("created_at", -1))
+    return jsonify(comments)
+
+
+@app.route("/api/videos/<video_id>/comments", methods=["POST"])
+def add_comment(video_id):
+    name = request.form.get("name", "").strip()
+    text = request.form.get("text", "").strip()
+    comment_type = request.form.get("type", "text")
+
+    if not name:
+        return jsonify({"error": "Name is required"}), 400
+
+    filename = None
+    if "file" in request.files:
+        f = request.files["file"]
+        ext = f.filename.rsplit(".", 1)[-1] if "." in f.filename else "webm"
+        filename = f"{video_id}_{int(time.time())}.{ext}"
+        f.save(os.path.join(UPLOAD_DIR, filename))
+
+    comment = {
+        "video_id": video_id,
+        "name": name,
+        "text": text,
+        "type": comment_type,
+        "filename": filename,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    comments_collection.insert_one(comment)
+    comment.pop("_id", None)
+    return jsonify(comment), 201
+
+
+@app.route("/api/uploads/<filename>", methods=["GET"])
+def serve_upload(filename):
+    return send_from_directory(UPLOAD_DIR, secure_filename(filename))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,228 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import './VideoDetail.css';
+
+function CommentSection({ videoId }) {
+  const [comments, setComments] = useState([]);
+  const [name, setName] = useState(() => localStorage.getItem('comment_name') || '');
+  const [text, setText] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [recordType, setRecordType] = useState(null);
+  const [mediaBlob, setMediaBlob] = useState(null);
+  const [mediaUrl, setMediaUrl] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const streamRef = useRef(null);
+  const videoPreviewRef = useRef(null);
+
+  useEffect(() => {
+    fetch(`/api/videos/${videoId}/comments`)
+      .then(res => res.json())
+      .then(data => setComments(data))
+      .catch(err => console.error('Error fetching comments:', err));
+  }, [videoId]);
+
+  useEffect(() => {
+    localStorage.setItem('comment_name', name);
+  }, [name]);
+
+  const startRecording = async (type) => {
+    try {
+      const constraints = type === 'video'
+        ? { audio: true, video: true }
+        : { audio: true };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+
+      const mimeType = type === 'video'
+        ? (MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : 'video/mp4')
+        : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4');
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        setMediaBlob(blob);
+        setMediaUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(t => t.stop());
+        if (videoPreviewRef.current) videoPreviewRef.current.srcObject = null;
+      };
+
+      recorder.start();
+      setRecording(true);
+      setRecordType(type);
+      setMediaBlob(null);
+      setMediaUrl(null);
+    } catch (err) {
+      console.error('Recording error:', err);
+      alert('Could not access microphone/camera. Please allow permissions.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setRecording(false);
+  };
+
+  const clearRecording = () => {
+    setMediaBlob(null);
+    setMediaUrl(null);
+    setRecordType(null);
+  };
+
+  const handleSubmit = async () => {
+    if (!name.trim()) {
+      alert('Please enter your name.');
+      return;
+    }
+    if (!text.trim() && !mediaBlob) {
+      alert('Please add a comment or recording.');
+      return;
+    }
+
+    setSubmitting(true);
+    const formData = new FormData();
+    formData.append('name', name.trim());
+    formData.append('text', text.trim());
+    formData.append('type', mediaBlob ? recordType : 'text');
+    if (mediaBlob) {
+      const ext = mediaBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      formData.append('file', mediaBlob, `recording.${ext}`);
+    }
+
+    try {
+      const res = await fetch(`/api/videos/${videoId}/comments`, {
+        method: 'POST',
+        body: formData,
+      });
+      const comment = await res.json();
+      setComments(prev => [comment, ...prev]);
+      setText('');
+      clearRecording();
+    } catch (err) {
+      console.error('Error submitting comment:', err);
+    }
+    setSubmitting(false);
+  };
+
+  const formatDate = (iso) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      + ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  return (
+    <div className="comments-section">
+      <h3>Comments</h3>
+      <p className="comments-subtitle">Leave feedback to help verify the accuracy of AI-extracted data.</p>
+
+      <div className="comment-input">
+        <input
+          type="text"
+          className="comment-name-input"
+          placeholder="Your name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <textarea
+          className="comment-text-input"
+          placeholder="Add a comment..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={3}
+        />
+
+        <div className="comment-record-controls">
+          {!recording && !mediaBlob && (
+            <>
+              <button className="record-btn audio" onClick={() => startRecording('audio')}>
+                <span className="record-icon">&#9679;</span> Record Audio
+              </button>
+              <button className="record-btn video" onClick={() => startRecording('video')}>
+                <span className="record-icon">&#9679;</span> Record Video
+              </button>
+            </>
+          )}
+
+          {recording && (
+            <button className="record-btn stop" onClick={stopRecording}>
+              <span className="stop-icon">&#9632;</span> Stop Recording
+            </button>
+          )}
+        </div>
+
+        {recording && recordType === 'video' && (
+          <video
+            ref={(el) => {
+              videoPreviewRef.current = el;
+              if (el && streamRef.current) {
+                el.srcObject = streamRef.current;
+              }
+            }}
+            className="comment-video-live"
+            muted
+            autoPlay
+            playsInline
+          />
+        )}
+
+        {recording && recordType === 'audio' && (
+          <div className="recording-indicator">
+            <span className="recording-dot" /> Recording audio...
+          </div>
+        )}
+
+        {mediaUrl && !recording && (
+          <div className="comment-preview">
+            {recordType === 'audio' ? (
+              <audio src={mediaUrl} controls />
+            ) : (
+              <video src={mediaUrl} controls className="comment-video-preview" />
+            )}
+            <button className="discard-btn" onClick={clearRecording}>Discard</button>
+          </div>
+        )}
+
+        <button
+          className="comment-submit-btn"
+          onClick={handleSubmit}
+          disabled={submitting}
+        >
+          {submitting ? 'Submitting...' : 'Submit'}
+        </button>
+      </div>
+
+      <div className="comment-list">
+        {comments.length === 0 && (
+          <p className="no-comments">No comments yet. Be the first to leave feedback!</p>
+        )}
+        {comments.map((c, i) => (
+          <div key={i} className="comment-card">
+            <div className="comment-header">
+              <span className="comment-author">{c.name}</span>
+              <span className="comment-date">{formatDate(c.created_at)}</span>
+            </div>
+            {c.text && <p className="comment-body">{c.text}</p>}
+            {c.filename && c.type === 'audio' && (
+              <audio src={`/api/uploads/${c.filename}`} controls className="comment-audio" />
+            )}
+            {c.filename && c.type === 'video' && (
+              <video src={`/api/uploads/${c.filename}`} controls className="comment-video-playback" />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // format seconds to mm:ss
 function formatTime(seconds) {
@@ -281,6 +503,8 @@ function VideoDetail() {
           </div>
         </div>
       )}
+
+      <CommentSection videoId={videoId} />
     </div>
   );
 }
