@@ -196,7 +196,7 @@ function CommentSection({ videoId }) {
           onClick={handleSubmit}
           disabled={submitting}
         >
-          {submitting ? 'Submitting...' : 'Submit'}
+          {submitting ? 'Submitting & Transcribing...' : 'Submit'}
         </button>
       </div>
 
@@ -217,6 +217,21 @@ function CommentSection({ videoId }) {
             {c.filename && c.type === 'video' && (
               <video src={`/api/uploads/${c.filename}`} controls className="comment-video-playback" />
             )}
+            {c.transcript && (
+              <div className="comment-transcript">
+                <span className="comment-transcript-label">Transcript:</span> {c.transcript}
+              </div>
+            )}
+            <button
+              className="comment-delete-btn"
+              onClick={async () => {
+                if (!window.confirm('Delete this comment?')) return;
+                await fetch(`/api/comments/${c.id}`, { method: 'DELETE' });
+                setComments(prev => prev.filter(x => x.id !== c.id));
+              }}
+            >
+              Delete
+            </button>
           </div>
         ))}
       </div>

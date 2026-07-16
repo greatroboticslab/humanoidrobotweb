@@ -629,15 +629,53 @@
 }
 
 .comment-audio {
+    display: block;
     width: 100%;
-    margin-top: 4px;
+    max-width: 500px;
+    margin: 4px auto 0 auto;
 }
 
 .comment-video-playback {
+    display: block;
     width: 100%;
     max-width: 640px;
     border-radius: 8px;
-    margin-top: 4px;
+    margin: 4px auto 0 auto;
+}
+
+.comment-delete-btn {
+    display: block;
+    margin: 10px 0 0 auto;
+    padding: 4px 12px;
+    background: none;
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    color: var(--gray-500);
+    cursor: pointer;
+}
+
+.comment-delete-btn:hover {
+    color: #dc2626;
+    border-color: #dc2626;
+    background: #fef2f2;
+}
+
+.comment-transcript {
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: var(--mtsu-blue-light);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--gray-700);
+    line-height: 1.6;
+}
+
+.comment-transcript-label {
+    font-weight: 700;
+    color: var(--mtsu-blue);
 }
 
 /* loading */

@@ -1,11 +1,15 @@
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from pymongo import MongoClient
+from bson import ObjectId
 from datetime import datetime, timezone
 from werkzeug.utils import secure_filename
 import json
 import os
 import time
+import whisper
+
+whisper_model = whisper.load_model("base")
 
 app = Flask(__name__)
 CORS(app)
@@ -251,9 +255,11 @@ def get_stats():
 
 @app.route("/api/videos/<video_id>/comments", methods=["GET"])
 def get_comments(video_id):
-    comments = list(comments_collection.find(
-        {"video_id": video_id}, {"_id": 0}
-    ).sort("created_at", -1))
+    raw = comments_collection.find({"video_id": video_id}).sort("created_at", -1)
+    comments = []
+    for c in raw:
+        c["id"] = str(c.pop("_id"))
+        comments.append(c)
     return jsonify(comments)
 
 
@@ -267,11 +273,19 @@ def add_comment(video_id):
         return jsonify({"error": "Name is required"}), 400
 
     filename = None
+    transcript = None
     if "file" in request.files:
         f = request.files["file"]
         ext = f.filename.rsplit(".", 1)[-1] if "." in f.filename else "webm"
         filename = f"{video_id}_{int(time.time())}.{ext}"
-        f.save(os.path.join(UPLOAD_DIR, filename))
+        filepath = os.path.join(UPLOAD_DIR, filename)
+        f.save(filepath)
+
+        try:
+            result = whisper_model.transcribe(filepath)
+            transcript = result.get("text", "").strip()
+        except Exception as e:
+            print(f"Whisper transcription failed: {e}")
 
     comment = {
         "video_id": video_id,
@@ -279,11 +293,25 @@ def add_comment(video_id):
         "text": text,
         "type": comment_type,
         "filename": filename,
+        "transcript": transcript,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     comments_collection.insert_one(comment)
-    comment.pop("_id", None)
+    comment["id"] = str(comment.pop("_id"))
     return jsonify(comment), 201
+
+
+@app.route("/api/comments/<comment_id>", methods=["DELETE"])
+def delete_comment(comment_id):
+    comment = comments_collection.find_one({"_id": ObjectId(comment_id)})
+    if not comment:
+        return jsonify({"error": "Comment not found"}), 404
+    if comment.get("filename"):
+        filepath = os.path.join(UPLOAD_DIR, comment["filename"])
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    comments_collection.delete_one({"_id": ObjectId(comment_id)})
+    return jsonify({"deleted": True})
 
 
 @app.route("/api/uploads/<filename>", methods=["GET"])
