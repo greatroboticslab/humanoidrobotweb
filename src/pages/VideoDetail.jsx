@@ -27,17 +27,40 @@ function CommentSection({ videoId }) {
     localStorage.setItem('comment_name', name);
   }, [name]);
 
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef(null);
+
   const startRecording = async (type) => {
     try {
-      const constraints = type === 'video'
-        ? { audio: true, video: true }
-        : { audio: true };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream;
+      if (type === 'screen') {
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        let audioStream = null;
+        try {
+          audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (e) {}
+        if (audioStream) {
+          const combined = new MediaStream([
+            ...displayStream.getVideoTracks(),
+            ...audioStream.getAudioTracks(),
+          ]);
+          stream = combined;
+          displayStream.getVideoTracks()[0].onended = () => stopRecording();
+        } else {
+          stream = displayStream;
+          displayStream.getVideoTracks()[0].onended = () => stopRecording();
+        }
+      } else {
+        const constraints = type === 'video'
+          ? { audio: true, video: true }
+          : { audio: true };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      }
       streamRef.current = stream;
 
-      const mimeType = type === 'video'
-        ? (MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : 'video/mp4')
-        : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4');
+      const mimeType = type === 'audio'
+        ? (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4')
+        : (MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : 'video/mp4');
       const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
@@ -52,6 +75,7 @@ function CommentSection({ videoId }) {
         setMediaUrl(URL.createObjectURL(blob));
         stream.getTracks().forEach(t => t.stop());
         if (videoPreviewRef.current) videoPreviewRef.current.srcObject = null;
+        clearInterval(timerRef.current);
       };
 
       recorder.start();
@@ -59,9 +83,15 @@ function CommentSection({ videoId }) {
       setRecordType(type);
       setMediaBlob(null);
       setMediaUrl(null);
+      setElapsed(0);
+      timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000);
     } catch (err) {
       console.error('Recording error:', err);
-      alert('Could not access microphone/camera. Please allow permissions.');
+      if (type === 'screen') {
+        alert('Could not start screen recording. Please allow permissions.');
+      } else {
+        alert('Could not access microphone/camera. Please allow permissions.');
+      }
     }
   };
 
@@ -70,6 +100,7 @@ function CommentSection({ videoId }) {
       mediaRecorderRef.current.stop();
     }
     setRecording(false);
+    clearInterval(timerRef.current);
   };
 
   const clearRecording = () => {
@@ -149,10 +180,13 @@ function CommentSection({ videoId }) {
               <button className="record-btn video" onClick={() => startRecording('video')}>
                 <span className="record-icon">&#9679;</span> Record Video
               </button>
+              <button className="record-btn screen" onClick={() => startRecording('screen')}>
+                <span className="record-icon">&#9679;</span> Record Screen
+              </button>
             </>
           )}
 
-          {recording && (
+          {recording && recordType !== 'screen' && (
             <button className="record-btn stop" onClick={stopRecording}>
               <span className="stop-icon">&#9632;</span> Stop Recording
             </button>
@@ -214,8 +248,11 @@ function CommentSection({ videoId }) {
             {c.filename && c.type === 'audio' && (
               <audio src={`/api/uploads/${c.filename}`} controls className="comment-audio" />
             )}
-            {c.filename && c.type === 'video' && (
-              <video src={`/api/uploads/${c.filename}`} controls className="comment-video-playback" />
+            {c.filename && (c.type === 'video' || c.type === 'screen') && (
+              <div>
+                {c.type === 'screen' && <span className="comment-type-tag">Screen Recording</span>}
+                <video src={`/api/uploads/${c.filename}`} controls className="comment-video-playback" />
+              </div>
             )}
             {c.transcript && (
               <div className="comment-transcript">
@@ -235,6 +272,19 @@ function CommentSection({ videoId }) {
           </div>
         ))}
       </div>
+
+      {recording && recordType === 'screen' && (
+        <div className="floating-bar">
+          <span className="floating-dot" />
+          <span className="floating-label">Recording Screen</span>
+          <span className="floating-timer">
+            {String(Math.floor(elapsed / 60)).padStart(2, '0')}:{String(elapsed % 60).padStart(2, '0')}
+          </span>
+          <button className="floating-stop" onClick={stopRecording}>
+            <span className="stop-icon">&#9632;</span> Stop
+          </button>
+        </div>
+      )}
     </div>
   );
 }

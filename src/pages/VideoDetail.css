@@ -678,6 +678,79 @@
     color: var(--mtsu-blue);
 }
 
+/* floating recording bar */
+.floating-bar {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #1a1a1a;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 40px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 9999;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+}
+
+.floating-dot {
+    width: 12px;
+    height: 12px;
+    background: #dc2626;
+    border-radius: 50%;
+    animation: pulse 1s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+.floating-label {
+    font-weight: 600;
+}
+
+.floating-timer {
+    font-variant-numeric: tabular-nums;
+    color: #999;
+    min-width: 42px;
+}
+
+.floating-stop {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    background: #dc2626;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+}
+
+.floating-stop:hover {
+    background: #b91c1c;
+}
+
+.floating-stop .stop-icon {
+    font-size: 10px;
+}
+
+/* screen recording tag on comments */
+.comment-type-tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gray-500);
+    background: var(--gray-100);
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 6px;
+}
+
 /* loading */
 .loading {
     text-align: center;
