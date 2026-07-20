@@ -58,10 +58,17 @@ function CommentSection({ videoId }) {
       }
       streamRef.current = stream;
 
-      const mimeType = type === 'audio'
-        ? (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4')
-        : (MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : 'video/mp4');
-      const recorder = new MediaRecorder(stream, { mimeType });
+      let mimeType;
+      if (type === 'audio') {
+        if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
+        else if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+      } else {
+        if (MediaRecorder.isTypeSupported('video/webm')) mimeType = 'video/webm';
+        else if (MediaRecorder.isTypeSupported('video/mp4')) mimeType = 'video/mp4';
+      }
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
 
@@ -70,7 +77,7 @@ function CommentSection({ videoId }) {
       };
 
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mimeType });
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
         setMediaBlob(blob);
         setMediaUrl(URL.createObjectURL(blob));
         stream.getTracks().forEach(t => t.stop());
