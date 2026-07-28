@@ -28,27 +28,34 @@ function Home() {
   }, []);
 
   useEffect(() => {
-    // bail if google's script hasn't finished downloading yet
-    if (!window.google) return;
+    // poll until google's script has loaded
+    const interval = setInterval(() => {
+      if (!window.google) return;
 
-    // tells google where to send the token
-    window.google.accounts.id.initialize({
-      client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
-      callback: handleCredentialResponse,
-    });
+      clearInterval(interval);
 
-    // draw google's button into the empty div
-    window.google.accounts.id.renderButton(
-      googleButtonRef.current,
-      { theme: 'outline', size: 'large' }
-    );
+      // tells google where to send the token
+      window.google.accounts.id.initialize({
+        client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
+        callback: handleCredentialResponse,
+      });
+
+      // draw google's button into the empty div
+      window.google.accounts.id.renderButton(
+        googleButtonRef.current,
+        { theme: 'outline', size: 'large' }
+      );
+
+    }, 100);
+
+    return () => clearInterval(interval);
   }, []);
 
   function handleCredentialResponse(response) {
     fetch('/api/auth/google', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential:  response.credential }),
+      body: JSON.stringify({ credential: response.credential }),
     })
       .then(res => res.json())
       .then(data => console.log('Verified user:', data))

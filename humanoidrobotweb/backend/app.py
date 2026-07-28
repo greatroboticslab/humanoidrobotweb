@@ -16,6 +16,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
+ADMIN_EMAILS = [
+    e.strip().lower()
+    for e in os.environ.get("ADMIN_EMAILS", "").split(",")
+    if e.strip()
+]
 
 whisper_model = whisper.load_model("base")
 
@@ -29,6 +34,7 @@ videos_collection = db["videos"]
 pipeline1_collection = db["pipeline1"]
 pipeline2_collection = db["pipeline2"]
 comments_collection = db["comments"]
+users_collection = db["users"]
 
 # Data is included in the repo under backend/data/
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
@@ -91,12 +97,38 @@ def google_auth():
         print(f"Token verification failed: {e}")
         return jsonify({"error": "invalid token"}), 401
     
-    return jsonify({
-        "sub": idinfo["sub"],
-        "email": idinfo["email"],
-        "name": idinfo.get("name"),
-        "picture": idinfo.get("picture"),
-    })
+    sub = idinfo["sub"]
+    email = idinfo["email"].lower()
+    now = datetime.now(timezone.utc).isoformat()
+    
+    existing = users_collection.find_one({"sub": sub})
+    
+    if existing is None:
+        # first time user
+        role = "admin" if email in ADMIN_EMAILS else "user"
+        users_collection.insert_one({
+            "sub": sub,
+            "email": email,
+            "name": idinfo.get("name"),
+            "picture": idinfo.get("picture"),
+            "role": role,
+            "created_at": now,
+            "last_login": now
+        })
+    else:
+        # returning user: refresh profile, don't update role
+        users_collection.update_one(
+            {"sub": sub},
+            {"$set": {
+                "email": email,
+                "name": idinfo.get("name"),
+                "picture": idinfo.get("picture"),
+                "last_login": now,
+            }}
+        )
+        
+    user = users_collection.find_one({"sub": sub}, {"_id": 0})
+    return jsonify(user)
 
 @app.route("/api/videos", methods=["GET"])
 def get_videos():
