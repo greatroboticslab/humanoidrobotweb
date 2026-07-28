@@ -9,6 +9,14 @@ import os
 import time
 import whisper
 
+# google imports
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from dotenv import load_dotenv
+
+load_dotenv()
+GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
+
 whisper_model = whisper.load_model("base")
 
 app = Flask(__name__)
@@ -67,6 +75,28 @@ def load_data():
     else:
         print(f"Pipeline2 collection already has {pipeline2_collection.count_documents({})} entries.")
 
+@app.route("/api/auth/google", methods=["POST"])
+def google_auth():
+    token = request.json.get("credential")
+    if not token:
+        return jsonify({"error": "Missing credential"}), 400
+    
+    try:
+        idinfo = id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+            GOOGLE_CLIENT_ID
+        )
+    except ValueError as e:
+        print(f"Token verification failed: {e}")
+        return jsonify({"error": "invalid token"}), 401
+    
+    return jsonify({
+        "sub": idinfo["sub"],
+        "email": idinfo["email"],
+        "name": idinfo.get("name"),
+        "picture": idinfo.get("picture"),
+    })
 
 @app.route("/api/videos", methods=["GET"])
 def get_videos():

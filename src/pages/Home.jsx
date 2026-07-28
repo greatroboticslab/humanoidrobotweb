@@ -45,7 +45,14 @@ function Home() {
   }, []);
 
   function handleCredentialResponse(response) {
-    console.log('JWT:', response.credential);
+    fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential:  response.credential }),
+    })
+      .then(res => res.json())
+      .then(data => console.log('Verified user:', data))
+      .catch(err => console.error('Auth failed:', err))
   }
 
   return (
