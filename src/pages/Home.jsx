@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import './Home.css';
@@ -11,8 +11,6 @@ function Home() {
   const navigate = useNavigate();
   const [videos, setVideos] = useState([]);
   const [stats, setStats] = useState(null);
-
-  const googleButtonRef = useRef(null);
 
   // fetch video list and stats on mount
   useEffect(() => {
@@ -27,41 +25,6 @@ function Home() {
       .catch(err => console.error('Error fetching stats:', err));
   }, []);
 
-  useEffect(() => {
-    // poll until google's script has loaded
-    const interval = setInterval(() => {
-      if (!window.google) return;
-
-      clearInterval(interval);
-
-      // tells google where to send the token
-      window.google.accounts.id.initialize({
-        client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse,
-      });
-
-      // draw google's button into the empty div
-      window.google.accounts.id.renderButton(
-        googleButtonRef.current,
-        { theme: 'outline', size: 'large' }
-      );
-
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  function handleCredentialResponse(response) {
-    fetch('/api/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential: response.credential }),
-    })
-      .then(res => res.json())
-      .then(data => console.log('Verified user:', data))
-      .catch(err => console.error('Auth failed:', err))
-  }
-
   return (
     <>
       {/* hero banner */}
@@ -74,11 +37,6 @@ function Home() {
           <button className="exploreDatasetBtn" onClick={() => navigate('/dataset')}>Explore Dataset</button>
           <button className="viewToolsBtn" onClick={() => document.querySelector('.toolsBanner').scrollIntoView({ behavior: 'smooth' })}>View Tools</button>
         </div>
-      </div>
-
-      {/* placeholder 'Sign in with Google button */}
-      <div className="signIn">
-        <div ref={googleButtonRef}></div>
       </div>
 
       {/* stats bar, totals from /api/stats */}

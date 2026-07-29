@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 import './VideoDetail.css';
 
 function CommentSection({ videoId }) {
+  const { user, isAdmin } = useAuth();
   const [comments, setComments] = useState([]);
-  const [name, setName] = useState(() => localStorage.getItem('comment_name') || '');
   const [text, setText] = useState('');
   const [recording, setRecording] = useState(false);
   const [recordType, setRecordType] = useState(null);
@@ -22,10 +24,6 @@ function CommentSection({ videoId }) {
       .then(data => setComments(data))
       .catch(err => console.error('Error fetching comments:', err));
   }, [videoId]);
-
-  useEffect(() => {
-    localStorage.setItem('comment_name', name);
-  }, [name]);
 
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef(null);
@@ -117,10 +115,6 @@ function CommentSection({ videoId }) {
   };
 
   const handleSubmit = async () => {
-    if (!name.trim()) {
-      alert('Please enter your name.');
-      return;
-    }
     if (!text.trim() && !mediaBlob) {
       alert('Please add a comment or recording.');
       return;
@@ -128,7 +122,6 @@ function CommentSection({ videoId }) {
 
     setSubmitting(true);
     const formData = new FormData();
-    formData.append('name', name.trim());
     formData.append('text', text.trim());
     formData.append('type', mediaBlob ? recordType : 'text');
     if (mediaBlob) {
@@ -141,6 +134,11 @@ function CommentSection({ videoId }) {
         method: 'POST',
         body: formData,
       });
+      if (!res.ok) {
+        alert(res.status === 401 ? 'Please sign in to comment.' : 'Could not post comment.');
+        setSubmitting(false);
+        return;
+      }
       const comment = await res.json();
       setComments(prev => [comment, ...prev]);
       setText('');
@@ -162,14 +160,19 @@ function CommentSection({ videoId }) {
       <h3>Comments</h3>
       <p className="comments-subtitle">Leave feedback to help verify the accuracy of AI-extracted data.</p>
 
+      {!user ? (
+        <div className="comment-signin-prompt">
+          <p>Sign in to leave a comment.</p>
+          <GoogleSignInButton size="large" />
+        </div>
+      ) : (
       <div className="comment-input">
-        <input
-          type="text"
-          className="comment-name-input"
-          placeholder="Your name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+        <div className="comment-as">
+          {user.picture && (
+            <img src={user.picture} alt="" className="comment-as-avatar" referrerPolicy="no-referrer" />
+          )}
+          <span>Commenting as <strong>{user.name}</strong></span>
+        </div>
         <textarea
           className="comment-text-input"
           placeholder="Add a comment..."
@@ -240,6 +243,7 @@ function CommentSection({ videoId }) {
           {submitting ? 'Submitting & Transcribing...' : 'Submit'}
         </button>
       </div>
+      )}
 
       <div className="comment-list">
         {comments.length === 0 && (
@@ -248,7 +252,15 @@ function CommentSection({ videoId }) {
         {comments.map((c, i) => (
           <div key={i} className="comment-card">
             <div className="comment-header">
-              <span className="comment-author">{c.name}</span>
+              <div className="comment-author-group">
+                {c.picture && (
+                  <img src={c.picture} alt="" className="comment-avatar" referrerPolicy="no-referrer" />
+                )}
+                <span className="comment-author">{c.name}</span>
+                {c.role && c.role !== 'user' && (
+                  <span className="comment-role-tag">{c.role}</span>
+                )}
+              </div>
               <span className="comment-date">{formatDate(c.created_at)}</span>
             </div>
             {c.text && <p className="comment-body">{c.text}</p>}
@@ -266,16 +278,22 @@ function CommentSection({ videoId }) {
                 <span className="comment-transcript-label">Transcript:</span> {c.transcript}
               </div>
             )}
-            <button
-              className="comment-delete-btn"
-              onClick={async () => {
-                if (!window.confirm('Delete this comment?')) return;
-                await fetch(`/api/comments/${c.id}`, { method: 'DELETE' });
-                setComments(prev => prev.filter(x => x.id !== c.id));
-              }}
-            >
-              Delete
-            </button>
+            {user && (isAdmin || c.sub === user.sub) && (
+              <button
+                className="comment-delete-btn"
+                onClick={async () => {
+                  if (!window.confirm('Delete this comment?')) return;
+                  const res = await fetch(`/api/comments/${c.id}`, { method: 'DELETE' });
+                  if (!res.ok) {
+                    alert('Could not delete that comment.');
+                    return;
+                  }
+                  setComments(prev => prev.filter(x => x.id !== c.id));
+                }}
+              >
+                Delete
+              </button>
+            )}
           </div>
         ))}
       </div>

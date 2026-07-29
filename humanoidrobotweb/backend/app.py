@@ -361,13 +361,11 @@ def get_comments(video_id):
 
 
 @app.route("/api/videos/<video_id>/comments", methods=["POST"])
+@require_role()
 def add_comment(video_id):
-    name = request.form.get("name", "").strip()
+    user = g.current_user
     text = request.form.get("text", "").strip()
     comment_type = request.form.get("type", "text")
-
-    if not name:
-        return jsonify({"error": "Name is required"}), 400
 
     filename = None
     transcript = None
@@ -386,7 +384,10 @@ def add_comment(video_id):
 
     comment = {
         "video_id": video_id,
-        "name": name,
+        "sub": user["sub"],
+        "name": user.get("name") or user["email"],
+        "picture": user.get("picture"),
+        "role": user["role"],
         "text": text,
         "type": comment_type,
         "filename": filename,
@@ -399,11 +400,17 @@ def add_comment(video_id):
 
 
 @app.route("/api/comments/<comment_id>", methods=["DELETE"])
-@require_role("admin")
+@require_role()
 def delete_comment(comment_id):
     comment = comments_collection.find_one({"_id": ObjectId(comment_id)})
     if not comment:
         return jsonify({"error": "Comment not found"}), 404
+
+    # admins can delete anything, everyone else only their own
+    user = g.current_user
+    if user["role"] != "admin" and comment.get("sub") != user["sub"]:
+        return jsonify({"error": "Forbidden"}), 403
+
     if comment.get("filename"):
         filepath = os.path.join(UPLOAD_DIR, comment["filename"])
         if os.path.exists(filepath):
