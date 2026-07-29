@@ -1,5 +1,6 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, session, g
 from flask_cors import CORS
+from functools import wraps
 from pymongo import MongoClient
 from bson import ObjectId
 from datetime import datetime, timezone
@@ -25,6 +26,7 @@ ADMIN_EMAILS = [
 whisper_model = whisper.load_model("base")
 
 app = Flask(__name__)
+app.secret_key = os.environ["FLASK_SECRET_KEY"]
 CORS(app)
 
 # MongoDB connection
@@ -81,6 +83,24 @@ def load_data():
     else:
         print(f"Pipeline2 collection already has {pipeline2_collection.count_documents({})} entries.")
 
+def require_role(*roles):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            sub = session.get("sub")
+            if not sub:
+                return jsonify({"error": "Not logged in"}), 401
+            user = users_collection.find_one({"sub": sub})
+            if not user:
+                return jsonify({"error": "Not logged in"}), 401
+            
+            if roles and user["role"] not in roles:
+                return jsonify({"error": "Forbidden"}), 403
+            g.current_user = user
+            return fn(*args, **kwargs)
+        return wrapper
+    return decorator
+
 @app.route("/api/auth/google", methods=["POST"])
 def google_auth():
     token = request.json.get("credential")
@@ -128,7 +148,22 @@ def google_auth():
         )
         
     user = users_collection.find_one({"sub": sub}, {"_id": 0})
+    session["sub"] = sub
+    session.permanent = True
     return jsonify(user)
+
+@app.route("/api/auth/me", methods=["GET"])
+def auth_me():
+    sub = session.get("sub")
+    if not sub:
+        return jsonify({"user": None})
+    return jsonify({"user":
+        users_collection.find_one({"sub": sub}, {"_id": 0})})
+    
+@app.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    session.clear()
+    return jsonify({"ok": True})
 
 @app.route("/api/videos", methods=["GET"])
 def get_videos():
@@ -364,6 +399,7 @@ def add_comment(video_id):
 
 
 @app.route("/api/comments/<comment_id>", methods=["DELETE"])
+@require_role("admin")
 def delete_comment(comment_id):
     comment = comments_collection.find_one({"_id": ObjectId(comment_id)})
     if not comment:
