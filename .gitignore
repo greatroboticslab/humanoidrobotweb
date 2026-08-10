@@ -26,3 +26,10 @@ __pycache__/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# python
+__pycache__/
+*.pyc
+
+# comment recordings
+humanoidrobotweb/backend/uploads/
