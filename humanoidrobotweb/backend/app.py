@@ -3,10 +3,12 @@ from flask_cors import CORS
 from functools import wraps
 from pymongo import MongoClient
 from bson import ObjectId
-from datetime import datetime, timezone
+from bson.errors import InvalidId
+from datetime import datetime, timedelta, timezone
 from werkzeug.utils import secure_filename
 import json
 import os
+import re
 import time
 import whisper
 
@@ -23,11 +25,32 @@ ADMIN_EMAILS = [
     if e.strip()
 ]
 
+# the three roles the site knows about, least to most privileged
+ROLES = ("user", "developer", "admin")
+
 whisper_model = whisper.load_model("base")
 
 app = Flask(__name__)
 app.secret_key = os.environ["FLASK_SECRET_KEY"]
-CORS(app)
+app.config.update(
+    PERMANENT_SESSION_LIFETIME=timedelta(days=14),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    # only send the cookie over https once this is deployed behind tls
+    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "0") == "1",
+)
+
+# the session cookie has to ride along on cross-origin requests, which it only
+# does when both the server allows credentials and the origin is explicit
+CORS(
+    app,
+    supports_credentials=True,
+    origins=[
+        o.strip()
+        for o in os.environ.get("FRONTEND_ORIGINS", "http://localhost:3000").split(",")
+        if o.strip()
+    ],
+)
 
 # MongoDB connection
 client = MongoClient("mongodb://localhost:27017/")
@@ -84,6 +107,7 @@ def load_data():
         print(f"Pipeline2 collection already has {pipeline2_collection.count_documents({})} entries.")
 
 def require_role(*roles):
+    """Gate a route behind a login, and optionally behind specific roles."""
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
@@ -92,9 +116,11 @@ def require_role(*roles):
                 return jsonify({"error": "Not logged in"}), 401
             user = users_collection.find_one({"sub": sub})
             if not user:
+                # session points at a user that no longer exists
+                session.clear()
                 return jsonify({"error": "Not logged in"}), 401
-            
-            if roles and user["role"] not in roles:
+
+            if roles and user.get("role", "user") not in roles:
                 return jsonify({"error": "Forbidden"}), 403
             g.current_user = user
             return fn(*args, **kwargs)
@@ -136,17 +162,23 @@ def google_auth():
             "last_login": now
         })
     else:
-        # returning user: refresh profile, don't update role
-        users_collection.update_one(
-            {"sub": sub},
-            {"$set": {
-                "email": email,
-                "name": idinfo.get("name"),
-                "picture": idinfo.get("picture"),
-                "last_login": now,
-            }}
-        )
-        
+        # returning user: refresh profile, keep whatever role they were given
+        updates = {
+            "email": email,
+            "name": idinfo.get("name"),
+            "picture": idinfo.get("picture"),
+            "last_login": now,
+        }
+        # ADMIN_EMAILS is the bootstrap escape hatch: adding an address there
+        # promotes that person on their next login even if they signed up first.
+        # It never demotes anyone, so admins granted in the UI are safe.
+        if email in ADMIN_EMAILS and existing.get("role") != "admin":
+            updates["role"] = "admin"
+        elif existing.get("role") not in ROLES:
+            updates["role"] = "user"
+        users_collection.update_one({"sub": sub}, {"$set": updates})
+
+
     user = users_collection.find_one({"sub": sub}, {"_id": 0})
     session["sub"] = sub
     session.permanent = True
@@ -164,6 +196,374 @@ def auth_me():
 def auth_logout():
     session.clear()
     return jsonify({"ok": True})
+
+
+@app.route("/api/users", methods=["GET"])
+@require_role("admin")
+def list_users():
+    """Every account, newest sign-in first. Admin only."""
+    users = list(
+        users_collection.find({}, {"_id": 0}).sort("last_login", -1)
+    )
+    for u in users:
+        u.setdefault("role", "user")
+    return jsonify(users)
+
+
+@app.route("/api/users/<sub>/role", methods=["PATCH"])
+@require_role("admin")
+def set_user_role(sub):
+    """Promote or demote an account. Admin only."""
+    role = (request.json or {}).get("role")
+    if role not in ROLES:
+        return jsonify({"error": f"Role must be one of {', '.join(ROLES)}"}), 400
+
+    target = users_collection.find_one({"sub": sub})
+    if not target:
+        return jsonify({"error": "User not found"}), 404
+
+    # don't let the last admin strand the site with nobody who can manage roles
+    if target.get("role") == "admin" and role != "admin":
+        if users_collection.count_documents({"role": "admin"}) <= 1:
+            return jsonify({"error": "Cannot demote the last admin"}), 400
+        if target["sub"] == g.current_user["sub"]:
+            return jsonify({"error": "You cannot demote yourself"}), 400
+
+    users_collection.update_one({"sub": sub}, {"$set": {"role": role}})
+    return jsonify(users_collection.find_one({"sub": sub}, {"_id": 0}))
+
+
+# data query interface (admin + developer)
+
+# task/subtask counts that several sources need, expressed over a "tasks" array
+_TASK_COUNT = {"$size": {"$ifNull": ["$tasks", []]}}
+_SUBTASK_COUNT = {
+    "$sum": {
+        "$map": {
+            "input": {"$ifNull": ["$tasks", []]},
+            "as": "t",
+            "in": {"$size": {"$ifNull": ["$$t.subtasks", []]}},
+        }
+    }
+}
+
+QUERY_SOURCES = {
+    "videos": {
+        "label": "Videos — extracted tasks",
+        "collection": "videos",
+        "description": "One document per processed video, with its task/subtask tree.",
+        "admin_only": False,
+        "add_fields": {"task_count": _TASK_COUNT, "subtask_count": _SUBTASK_COUNT},
+        "fields": {
+            "video_id": {"type": "string", "label": "Video ID"},
+            "title": {"type": "string", "label": "Title"},
+            "task_count": {"type": "number", "label": "Tasks"},
+            "subtask_count": {"type": "number", "label": "Subtasks"},
+            "url": {"type": "string", "label": "URL"},
+        },
+        "columns": ["video_id", "title", "task_count", "subtask_count", "url"],
+        "default_sort": "video_id",
+    },
+    "pipeline1": {
+        "label": "Pipeline 1 — robot guidance",
+        "collection": "pipeline1",
+        "description": "Generated robot instructions, frames and success criteria.",
+        "admin_only": False,
+        "add_fields": {
+            "task_count": _TASK_COUNT,
+            "subtask_count": _SUBTASK_COUNT,
+            "frame_count": {
+                "$sum": {
+                    "$map": {
+                        "input": {"$ifNull": ["$tasks", []]},
+                        "as": "t",
+                        "in": {
+                            "$sum": {
+                                "$map": {
+                                    "input": {"$ifNull": ["$$t.subtasks", []]},
+                                    "as": "s",
+                                    "in": {"$size": {"$ifNull": ["$$s.frames", []]}},
+                                }
+                            }
+                        },
+                    }
+                }
+            },
+        },
+        "fields": {
+            "video_id": {"type": "string", "label": "Video ID"},
+            "task_count": {"type": "number", "label": "Tasks"},
+            "subtask_count": {"type": "number", "label": "Subtasks"},
+            "frame_count": {"type": "number", "label": "Frames"},
+        },
+        "columns": ["video_id", "task_count", "subtask_count", "frame_count"],
+        "default_sort": "video_id",
+    },
+    "pipeline2": {
+        "label": "Pipeline 2 — missions & blocks",
+        "collection": "pipeline2",
+        "description": "Mission / sub-mission structure and the classified blocks.",
+        "admin_only": False,
+        "add_fields": {
+            "block_count": {"$size": {"$ifNull": ["$blocks", []]}},
+            "sub_mission_count": {"$size": {"$ifNull": ["$sub_missions", []]}},
+            "categories": {
+                "$setUnion": [
+                    {
+                        "$map": {
+                            "input": {"$ifNull": ["$blocks", []]},
+                            "as": "b",
+                            "in": "$$b.dominant_category",
+                        }
+                    },
+                    [],
+                ]
+            },
+        },
+        "fields": {
+            "video_id": {"type": "string", "label": "Video ID"},
+            "mission_title": {"type": "string", "label": "Mission"},
+            "block_count": {"type": "number", "label": "Blocks"},
+            "sub_mission_count": {"type": "number", "label": "Sub-missions"},
+            "categories": {
+                "type": "enum",
+                "label": "Contains category",
+                "options": ["narration", "planning", "perception", "motion"],
+            },
+        },
+        "columns": [
+            "video_id",
+            "mission_title",
+            "sub_mission_count",
+            "block_count",
+            "categories",
+        ],
+        "default_sort": "video_id",
+    },
+    "comments": {
+        "label": "Comments — reviewer feedback",
+        "collection": "comments",
+        "description": "Text, audio, video and screen feedback left on videos.",
+        "admin_only": False,
+        "add_fields": {
+            "has_media": {"$ne": [{"$ifNull": ["$filename", None]}, None]},
+        },
+        "fields": {
+            "video_id": {"type": "string", "label": "Video ID"},
+            "name": {"type": "string", "label": "Author"},
+            "role": {"type": "enum", "label": "Author role", "options": list(ROLES)},
+            "type": {
+                "type": "enum",
+                "label": "Type",
+                "options": ["text", "audio", "video", "screen"],
+            },
+            "text": {"type": "string", "label": "Text"},
+            "transcript": {"type": "string", "label": "Transcript"},
+            "has_media": {"type": "boolean", "label": "Has recording"},
+            "created_at": {"type": "date", "label": "Posted"},
+        },
+        "columns": [
+            "created_at",
+            "video_id",
+            "name",
+            "role",
+            "type",
+            "text",
+            "transcript",
+        ],
+        "default_sort": "-created_at",
+    },
+    "users": {
+        "label": "Users — accounts",
+        "collection": "users",
+        "description": "Signed-in accounts. Admin only, since it contains emails.",
+        "admin_only": True,
+        "add_fields": {},
+        "fields": {
+            "email": {"type": "string", "label": "Email"},
+            "name": {"type": "string", "label": "Name"},
+            "role": {"type": "enum", "label": "Role", "options": list(ROLES)},
+            "created_at": {"type": "date", "label": "Joined"},
+            "last_login": {"type": "date", "label": "Last login"},
+        },
+        "columns": ["name", "email", "role", "created_at", "last_login"],
+        "default_sort": "-last_login",
+    },
+}
+
+# which operators make sense for which field type
+QUERY_OPERATORS = {
+    "eq": {"label": "is", "types": ["string", "number", "enum", "boolean", "date"]},
+    "ne": {"label": "is not", "types": ["string", "number", "enum", "boolean", "date"]},
+    "contains": {"label": "contains", "types": ["string"]},
+    "starts_with": {"label": "starts with", "types": ["string"]},
+    "gt": {"label": "greater than", "types": ["number", "date"]},
+    "gte": {"label": "at least", "types": ["number", "date"]},
+    "lt": {"label": "less than", "types": ["number", "date"]},
+    "lte": {"label": "at most", "types": ["number", "date"]},
+    "in": {"label": "is any of", "types": ["string", "number", "enum"]},
+    "exists": {"label": "is present", "types": ["string", "number", "enum", "date"]},
+}
+
+QUERY_MAX_LIMIT = 200
+
+
+def _coerce(value, field_type):
+    """Turn a JSON value from the client into something comparable in Mongo."""
+    if field_type == "number":
+        try:
+            num = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"'{value}' is not a number")
+        return int(num) if num.is_integer() else num
+    if field_type == "boolean":
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in ("1", "true", "yes")
+    # dates are stored as ISO-8601 strings, which compare correctly as strings
+    return str(value)
+
+
+def _build_match(source, filters):
+    """Translate the filter list into a Mongo $match, or raise ValueError."""
+    clauses = []
+    for f in filters:
+        name = f.get("field")
+        op = f.get("op", "eq")
+        spec = source["fields"].get(name)
+        if spec is None:
+            raise ValueError(f"Unknown field '{name}'")
+        if op not in QUERY_OPERATORS:
+            raise ValueError(f"Unknown operator '{op}'")
+        if spec["type"] not in QUERY_OPERATORS[op]["types"]:
+            raise ValueError(f"'{QUERY_OPERATORS[op]['label']}' does not apply to {name}")
+
+        raw = f.get("value", "")
+
+        if op == "exists":
+            # "present" means the field is there and non-empty, not merely set
+            want = _coerce(True if raw == "" else raw, "boolean")
+            if want:
+                clauses.append({name: {"$exists": True, "$nin": [None, ""]}})
+            else:
+                clauses.append({"$or": [
+                    {name: {"$exists": False}},
+                    {name: {"$in": [None, ""]}},
+                ]})
+        elif op in ("contains", "starts_with"):
+            if raw == "":
+                continue
+            pattern = re.escape(str(raw))
+            if op == "starts_with":
+                pattern = "^" + pattern
+            clauses.append({name: {"$regex": pattern, "$options": "i"}})
+        elif op == "in":
+            parts = raw if isinstance(raw, list) else str(raw).split(",")
+            values = [_coerce(p.strip() if isinstance(p, str) else p, spec["type"])
+                      for p in parts if str(p).strip() != ""]
+            if not values:
+                continue
+            clauses.append({name: {"$in": values}})
+        else:
+            if raw == "" and spec["type"] != "boolean":
+                continue
+            clauses.append({name: {f"${op}": _coerce(raw, spec["type"])}})
+
+    return clauses
+
+
+@app.route("/api/query/schema", methods=["GET"])
+@require_role("admin", "developer")
+def query_schema():
+    """Describe what can be queried, so the UI can build its dropdowns."""
+    is_admin = g.current_user.get("role") == "admin"
+    # a list, not a dict, so the UI keeps the order declared above rather than
+    # whatever alphabetical order jsonify would impose
+    sources = [
+        {
+            "key": key,
+            "label": src["label"],
+            "description": src["description"],
+            "fields": src["fields"],
+            "columns": src["columns"],
+            "default_sort": src["default_sort"],
+        }
+        for key, src in QUERY_SOURCES.items()
+        if is_admin or not src["admin_only"]
+    ]
+    return jsonify({
+        "sources": sources,
+        "operators": QUERY_OPERATORS,
+        "max_limit": QUERY_MAX_LIMIT,
+    })
+
+
+@app.route("/api/query", methods=["POST"])
+@require_role("admin", "developer")
+def run_query():
+    body = request.json or {}
+    source = QUERY_SOURCES.get(body.get("source"))
+    if source is None:
+        return jsonify({"error": "Unknown data source"}), 400
+    if source["admin_only"] and g.current_user.get("role") != "admin":
+        return jsonify({"error": "Forbidden"}), 403
+
+    filters = body.get("filters") or []
+    if not isinstance(filters, list):
+        return jsonify({"error": "filters must be a list"}), 400
+
+    try:
+        clauses = _build_match(source, filters)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    if clauses:
+        combinator = "$or" if body.get("combinator") == "or" else "$and"
+        match = {combinator: clauses}
+    else:
+        match = {}
+
+    sort_field = body.get("sort") or source["default_sort"]
+    direction = -1 if sort_field.startswith("-") else 1
+    sort_field = sort_field.lstrip("-")
+    if sort_field not in source["fields"]:
+        return jsonify({"error": f"Cannot sort by '{sort_field}'"}), 400
+
+    try:
+        limit = min(int(body.get("limit", 50)), QUERY_MAX_LIMIT)
+        skip = max(int(body.get("skip", 0)), 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "limit and skip must be numbers"}), 400
+    limit = max(limit, 1)
+
+    stages = []
+    if source["add_fields"]:
+        stages.append({"$addFields": source["add_fields"]})
+    if match:
+        stages.append({"$match": match})
+
+    collection = db[source["collection"]]
+    total = next(
+        iter(collection.aggregate(stages + [{"$count": "n"}])), {"n": 0}
+    )["n"]
+
+    projection = {"_id": 0}
+    projection.update({c: 1 for c in source["columns"]})
+    rows = list(collection.aggregate(stages + [
+        {"$sort": {sort_field: direction}},
+        {"$skip": skip},
+        {"$limit": limit},
+        {"$project": projection},
+    ]))
+
+    return jsonify({
+        "rows": rows,
+        "columns": source["columns"],
+        "fields": source["fields"],
+        "total": total,
+        "limit": limit,
+        "skip": skip,
+    })
 
 @app.route("/api/videos", methods=["GET"])
 def get_videos():
@@ -402,20 +802,25 @@ def add_comment(video_id):
 @app.route("/api/comments/<comment_id>", methods=["DELETE"])
 @require_role()
 def delete_comment(comment_id):
-    comment = comments_collection.find_one({"_id": ObjectId(comment_id)})
+    try:
+        oid = ObjectId(comment_id)
+    except (InvalidId, TypeError):
+        return jsonify({"error": "Comment not found"}), 404
+
+    comment = comments_collection.find_one({"_id": oid})
     if not comment:
         return jsonify({"error": "Comment not found"}), 404
 
     # admins can delete anything, everyone else only their own
     user = g.current_user
-    if user["role"] != "admin" and comment.get("sub") != user["sub"]:
+    if user.get("role") != "admin" and comment.get("sub") != user["sub"]:
         return jsonify({"error": "Forbidden"}), 403
 
     if comment.get("filename"):
         filepath = os.path.join(UPLOAD_DIR, comment["filename"])
         if os.path.exists(filepath):
             os.remove(filepath)
-    comments_collection.delete_one({"_id": ObjectId(comment_id)})
+    comments_collection.delete_one({"_id": oid})
     return jsonify({"deleted": True})
 
 

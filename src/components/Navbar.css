@@ -19,6 +19,8 @@
   text-decoration: none;
   font-size: 18px;
   color: var(--gray-900);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .nav-logo strong {
@@ -42,12 +44,51 @@
   font-weight: 700;
 }
 
+/* holds the links and the auth area so they can collapse together on mobile */
+.nav-collapse {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+}
+
+/* hamburger, only shown once the bar runs out of room */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  background: var(--white);
+  cursor: pointer;
+}
+
+.nav-toggle span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  margin: 0 auto;
+  border-radius: 2px;
+  background: var(--gray-700);
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+.nav-toggle.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.nav-toggle.open span:nth-child(2) { opacity: 0; }
+.nav-toggle.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
 /* Nav links */
 .nav-links {
   display: flex;
   gap: 32px;
   list-style: none;
-  margin: 0;
+  /* auto side margins centre the links in whatever space the logo and the
+     auth area leave over */
+  margin: 0 auto;
   padding: 0;
 }
 
@@ -71,12 +112,30 @@
   border-bottom-color: var(--mtsu-blue);
 }
 
+.nav-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* marks the internal-only links so nobody mistakes them for public pages */
+.nav-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--mtsu-blue-light);
+  color: var(--mtsu-blue-dark);
+}
+
 /* auth area */
 .nav-auth {
   display: flex;
   align-items: center;
-  min-width: 180px;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .nav-user {
@@ -130,4 +189,67 @@
   color: #dc2626;
   border-color: #dc2626;
   background: #fef2f2;
+}
+
+/* tighten things up before resorting to the hamburger */
+@media (max-width: 1180px) {
+  .navbar { padding: 0 24px; }
+  .nav-links { gap: 22px; }
+  .nav-links a { font-size: 14px; }
+  .nav-username {
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* below this the links no longer fit on one line, so collapse them */
+@media (max-width: 980px) {
+  .navbar { padding: 0 20px; }
+
+  .nav-toggle { display: flex; }
+
+  .nav-collapse {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 8px 20px 16px;
+    background: var(--white);
+    border-bottom: 1px solid var(--gray-200);
+    box-shadow: 0 10px 20px rgba(17, 24, 39, 0.08);
+  }
+
+  .nav-collapse.open { display: flex; }
+
+  .nav-links {
+    flex-direction: column;
+    gap: 0;
+    margin: 0;
+    width: 100%;
+  }
+
+  .nav-links li { border-bottom: 1px solid var(--gray-100); }
+
+  .nav-links a {
+    padding: 13px 0;
+    font-size: 15px;
+    border-bottom: none;
+  }
+
+  /* the underline indicator makes no sense once the links are stacked */
+  .nav-links a:hover,
+  .nav-links a.active { border-bottom-color: transparent; }
+
+  .nav-auth {
+    justify-content: flex-start;
+    padding-top: 16px;
+  }
+
+  .nav-user { width: 100%; }
+  .nav-user-text { flex: 1; }
+  .nav-username { max-width: none; }
 }

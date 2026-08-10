@@ -5,7 +5,7 @@ import GoogleSignInButton from '../components/GoogleSignInButton';
 import './VideoDetail.css';
 
 function CommentSection({ videoId }) {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, refresh } = useAuth();
   const [comments, setComments] = useState([]);
   const [text, setText] = useState('');
   const [recording, setRecording] = useState(false);
@@ -135,7 +135,9 @@ function CommentSection({ videoId }) {
         body: formData,
       });
       if (!res.ok) {
-        alert(res.status === 401 ? 'Please sign in to comment.' : 'Could not post comment.');
+        // session expired while the tab was open, so drop back to the signed-out view
+        if (res.status === 401) refresh();
+        alert(res.status === 401 ? 'Your session expired. Please sign in again.' : 'Could not post comment.');
         setSubmitting(false);
         return;
       }
@@ -285,7 +287,10 @@ function CommentSection({ videoId }) {
                   if (!window.confirm('Delete this comment?')) return;
                   const res = await fetch(`/api/comments/${c.id}`, { method: 'DELETE' });
                   if (!res.ok) {
-                    alert('Could not delete that comment.');
+                    if (res.status === 401) refresh();
+                    alert(res.status === 401
+                      ? 'Your session expired. Please sign in again.'
+                      : 'Could not delete that comment.');
                     return;
                   }
                   setComments(prev => prev.filter(x => x.id !== c.id));
