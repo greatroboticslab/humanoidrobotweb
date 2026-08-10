@@ -61,6 +61,10 @@ function Query() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState(null);
   const [viewJson, setViewJson] = useState(false);
+  const [editingRow, setEditingRow] = useState(null);   // _row_id being edited
+  const [draft, setDraft] = useState({});               // pending field values
+  const [busyRow, setBusyRow] = useState(null);         // _row_id mid-request
+  const [notice, setNotice] = useState(null);
 
   // load the queryable sources and their fields
   useEffect(() => {
@@ -90,6 +94,8 @@ function Query() {
     if (!sourceSpec) return;
     setRunning(true);
     setError(null);
+    setNotice(null);
+    setEditingRow(null);
     try {
       const res = await fetch('/api/query', {
         method: 'POST',
@@ -137,6 +143,89 @@ function Query() {
     setSort(spec.default_sort);
     setResult(null);
     setPage(0);
+    setEditingRow(null);
+    setNotice(null);
+  };
+
+  const startEdit = (row) => {
+    setEditingRow(row._row_id);
+    setDraft(
+      Object.fromEntries(result.editable.map(f => [f, row[f] ?? '']))
+    );
+  };
+
+  const saveEdit = async (row) => {
+    setBusyRow(row._row_id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/query/${source}/${encodeURIComponent(row._row_id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draft),
+      });
+      if (res.status === 401 || res.status === 403) {
+        refresh();
+        setError('Your session has changed. Reloading your access...');
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Could not save those changes.');
+        return;
+      }
+      // patch the row in place rather than re-running the whole query
+      setResult(prev => ({
+        ...prev,
+        rows: prev.rows.map(r =>
+          r._row_id === row._row_id ? { ...r, ...data.updated } : r
+        ),
+      }));
+      setEditingRow(null);
+      setNotice('Saved.');
+    } catch {
+      setError('Could not reach the server.');
+    } finally {
+      setBusyRow(null);
+    }
+  };
+
+  const deleteRow = async (row) => {
+    const label = row.video_id || row.name || row._row_id;
+    const extra = result.cascade.length
+      ? `\n\nThis also deletes its ${result.cascade.join(', ')} records and any recordings attached to them.`
+      : '';
+    if (!window.confirm(`Delete "${label}"?${extra}\n\nThis cannot be undone.`)) return;
+
+    setBusyRow(row._row_id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/query/${source}/${encodeURIComponent(row._row_id)}`, {
+        method: 'DELETE',
+      });
+      if (res.status === 401 || res.status === 403) {
+        refresh();
+        setError('Your session has changed. Reloading your access...');
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Could not delete that row.');
+        return;
+      }
+      const summary = Object.entries(data.removed)
+        .map(([coll, n]) => `${n} from ${coll}`)
+        .join(', ');
+      setResult(prev => ({
+        ...prev,
+        rows: prev.rows.filter(r => r._row_id !== row._row_id),
+        total: prev.total - 1,
+      }));
+      setNotice(`Deleted ${summary}.`);
+    } catch {
+      setError('Could not reach the server.');
+    } finally {
+      setBusyRow(null);
+    }
   };
 
   const updateFilter = (id, patch) => {
@@ -172,6 +261,8 @@ function Query() {
   }
 
   const totalPages = result ? Math.ceil(result.total / PAGE_SIZE) : 0;
+  // developers get a read-only table; the backend decides, not the UI
+  const showActions = !!result && (result.deletable || result.editable.length > 0);
 
   return (
     <div className="query-page">
@@ -317,6 +408,7 @@ function Query() {
       </div>
 
       {error && <div className="query-error">{error}</div>}
+      {notice && <div className="query-notice">{notice}</div>}
 
       {/* results */}
       {result && (
@@ -365,25 +457,76 @@ function Query() {
                     {result.columns.map(c => (
                       <th key={c}>{result.fields[c]?.label || c}</th>
                     ))}
+                    {showActions && <th className="actions-col">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {result.rows.map((row, i) => (
-                    <tr key={i}>
-                      {result.columns.map(c => {
-                        const shown = cellText(row[c], result.fields[c]?.type);
-                        return (
-                          <td key={c} title={shown}>
-                            {c === 'video_id' && row[c] ? (
-                              <Link to={`/dataset/${row[c]}`}>{row[c]}</Link>
+                  {result.rows.map(row => {
+                    const editing = editingRow === row._row_id;
+                    const busy = busyRow === row._row_id;
+                    return (
+                      <tr key={row._row_id} className={editing ? 'row-editing' : ''}>
+                        {result.columns.map(c => {
+                          const shown = cellText(row[c], result.fields[c]?.type);
+                          const canEditCell = editing && result.editable.includes(c);
+                          return (
+                            <td key={c} title={canEditCell ? undefined : shown}>
+                              {canEditCell ? (
+                                <input
+                                  className="cell-input"
+                                  value={draft[c] ?? ''}
+                                  onChange={e => setDraft(d => ({ ...d, [c]: e.target.value }))}
+                                />
+                              ) : c === 'video_id' && row[c] ? (
+                                <Link to={`/dataset/${row[c]}`}>{row[c]}</Link>
+                              ) : (
+                                shown
+                              )}
+                            </td>
+                          );
+                        })}
+                        {showActions && (
+                          <td className="actions-col">
+                            {editing ? (
+                              <div className="row-actions">
+                                <button
+                                  className="row-btn save"
+                                  disabled={busy}
+                                  onClick={() => saveEdit(row)}
+                                >
+                                  {busy ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  className="row-btn"
+                                  disabled={busy}
+                                  onClick={() => setEditingRow(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             ) : (
-                              shown
+                              <div className="row-actions">
+                                {result.editable.length > 0 && (
+                                  <button className="row-btn" onClick={() => startEdit(row)}>
+                                    Edit
+                                  </button>
+                                )}
+                                {result.deletable && (
+                                  <button
+                                    className="row-btn delete"
+                                    disabled={busy}
+                                    onClick={() => deleteRow(row)}
+                                  >
+                                    {busy ? '...' : 'Delete'}
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

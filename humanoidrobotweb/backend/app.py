@@ -69,6 +69,16 @@ UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
+def _remove_upload(filename):
+    """Delete a recording from disk, ignoring anything already gone."""
+    if not filename:
+        return
+    # never let a stored name walk out of the uploads directory
+    path = os.path.join(UPLOAD_DIR, secure_filename(filename))
+    if os.path.isfile(path):
+        os.remove(path)
+
+
 def load_data():
     """Load pipeline data into MongoDB if collections are empty."""
 
@@ -263,6 +273,16 @@ QUERY_SOURCES = {
         },
         "columns": ["video_id", "title", "task_count", "subtask_count", "url"],
         "default_sort": "video_id",
+        "id_field": "video_id",
+        "editable": ["title", "url"],
+        "deletable": True,
+        # dropping a video takes its pipeline output and feedback with it,
+        # otherwise the other collections keep rows nothing can reach
+        "cascade": [
+            {"collection": "pipeline1", "key": "video_id"},
+            {"collection": "pipeline2", "key": "video_id"},
+            {"collection": "comments", "key": "video_id"},
+        ],
     },
     "pipeline1": {
         "label": "Pipeline 1 — robot guidance",
@@ -298,6 +318,9 @@ QUERY_SOURCES = {
         },
         "columns": ["video_id", "task_count", "subtask_count", "frame_count"],
         "default_sort": "video_id",
+        "id_field": "video_id",
+        "editable": [],
+        "deletable": True,
     },
     "pipeline2": {
         "label": "Pipeline 2 — missions & blocks",
@@ -339,6 +362,9 @@ QUERY_SOURCES = {
             "categories",
         ],
         "default_sort": "video_id",
+        "id_field": "video_id",
+        "editable": ["mission_title"],
+        "deletable": True,
     },
     "comments": {
         "label": "Comments — reviewer feedback",
@@ -372,6 +398,11 @@ QUERY_SOURCES = {
             "transcript",
         ],
         "default_sort": "-created_at",
+        "id_field": "_id",
+        "editable": ["text"],
+        "deletable": True,
+        # the recording lives on disk, so removing the row has to remove it too
+        "upload_field": "filename",
     },
     "users": {
         "label": "Users — accounts",
@@ -388,6 +419,11 @@ QUERY_SOURCES = {
         },
         "columns": ["name", "email", "role", "created_at", "last_login"],
         "default_sort": "-last_login",
+        "id_field": "sub",
+        # accounts are managed from /admin, which owns the last-admin guard.
+        # keeping that logic in one place means it can't be bypassed from here.
+        "editable": [],
+        "deletable": False,
     },
 }
 
@@ -547,15 +583,19 @@ def run_query():
         iter(collection.aggregate(stages + [{"$count": "n"}])), {"n": 0}
     )["n"]
 
-    projection = {"_id": 0}
+    # every row carries a stable handle so edit/delete can address it without
+    # the client having to know which field identifies this collection
+    projection = {"_id": 0, "_row_id": 1}
     projection.update({c: 1 for c in source["columns"]})
     rows = list(collection.aggregate(stages + [
+        {"$addFields": {"_row_id": {"$toString": f"${source['id_field']}"}}},
         {"$sort": {sort_field: direction}},
         {"$skip": skip},
         {"$limit": limit},
         {"$project": projection},
     ]))
 
+    is_admin = g.current_user.get("role") == "admin"
     return jsonify({
         "rows": rows,
         "columns": source["columns"],
@@ -563,7 +603,101 @@ def run_query():
         "total": total,
         "limit": limit,
         "skip": skip,
+        # only admins get write access, so developers see a read-only table
+        "editable": source["editable"] if is_admin else [],
+        "deletable": source["deletable"] and is_admin,
+        "cascade": [c["collection"] for c in source.get("cascade", [])],
     })
+
+
+def _row_filter(source, row_id):
+    """Address a single document by whatever field identifies its collection."""
+    if source["id_field"] == "_id":
+        try:
+            return {"_id": ObjectId(row_id)}
+        except (InvalidId, TypeError):
+            return None
+    return {source["id_field"]: row_id}
+
+
+@app.route("/api/query/<source_key>/<row_id>", methods=["PATCH"])
+@require_role("admin")
+def update_query_row(source_key, row_id):
+    """Edit an allowlisted field on a single row. Admin only."""
+    source = QUERY_SOURCES.get(source_key)
+    if source is None:
+        return jsonify({"error": "Unknown data source"}), 400
+    if not source["editable"]:
+        return jsonify({"error": "This collection is read-only"}), 403
+
+    body = request.json or {}
+    updates = {}
+    for name, value in body.items():
+        if name not in source["editable"]:
+            return jsonify({"error": f"'{name}' cannot be edited"}), 400
+        spec = source["fields"].get(name)
+        if spec is None:
+            return jsonify({"error": f"Unknown field '{name}'"}), 400
+        try:
+            updates[name] = _coerce(value, spec["type"])
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+    if not updates:
+        return jsonify({"error": "Nothing to update"}), 400
+
+    where = _row_filter(source, row_id)
+    if where is None:
+        return jsonify({"error": "Row not found"}), 404
+
+    result = db[source["collection"]].update_one(where, {"$set": updates})
+    if result.matched_count == 0:
+        return jsonify({"error": "Row not found"}), 404
+    return jsonify({"updated": updates})
+
+
+@app.route("/api/query/<source_key>/<row_id>", methods=["DELETE"])
+@require_role("admin")
+def delete_query_row(source_key, row_id):
+    """Delete a row, plus anything that only existed because of it. Admin only."""
+    source = QUERY_SOURCES.get(source_key)
+    if source is None:
+        return jsonify({"error": "Unknown data source"}), 400
+    if not source["deletable"]:
+        return jsonify({"error": "This collection cannot be deleted from here"}), 403
+
+    where = _row_filter(source, row_id)
+    if where is None:
+        return jsonify({"error": "Row not found"}), 404
+
+    collection = db[source["collection"]]
+    doc = collection.find_one(where)
+    if doc is None:
+        return jsonify({"error": "Row not found"}), 404
+
+    removed = {}
+
+    # clear out dependent collections first, so a failure part way through
+    # leaves the parent row behind as evidence rather than orphaning children
+    for rule in source.get("cascade", []):
+        key = rule["key"]
+        value = doc.get(key)
+        if value is None:
+            continue
+        child = db[rule["collection"]]
+        # recordings attached to those rows have files on disk to clean up
+        for orphan in child.find({key: value}, {"filename": 1}):
+            _remove_upload(orphan.get("filename"))
+        count = child.delete_many({key: value}).deleted_count
+        if count:
+            removed[rule["collection"]] = count
+
+    if source.get("upload_field"):
+        _remove_upload(doc.get(source["upload_field"]))
+
+    collection.delete_one(where)
+    removed[source["collection"]] = 1
+    return jsonify({"deleted": True, "removed": removed})
 
 @app.route("/api/videos", methods=["GET"])
 def get_videos():
@@ -816,10 +950,7 @@ def delete_comment(comment_id):
     if user.get("role") != "admin" and comment.get("sub") != user["sub"]:
         return jsonify({"error": "Forbidden"}), 403
 
-    if comment.get("filename"):
-        filepath = os.path.join(UPLOAD_DIR, comment["filename"])
-        if os.path.exists(filepath):
-            os.remove(filepath)
+    _remove_upload(comment.get("filename"))
     comments_collection.delete_one({"_id": oid})
     return jsonify({"deleted": True})
 

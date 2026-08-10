@@ -214,6 +214,8 @@ COOKIE_SECURE=0
 |--------|-------|------|-------------|
 | GET | `/api/query/schema` | developer, admin | Queryable collections, their fields and the valid operators |
 | POST | `/api/query` | developer, admin | Runs a filtered query (the `users` source is admin only) |
+| PATCH | `/api/query/<source>/<row_id>` | admin | Updates allowlisted fields on one row |
+| DELETE | `/api/query/<source>/<row_id>` | admin | Deletes a row, cascading to dependent collections |
 | GET | `/api/users` | admin | Every account |
 | PATCH | `/api/users/<sub>/role` | admin | Sets an account's role to `user`, `developer` or `admin` |
 
@@ -229,6 +231,26 @@ carries `{field, op, value}` triples, and the backend looks up every field name
 and operator in an allowlist before building the aggregation pipeline, so
 operators like `$where` cannot be smuggled in and no collection outside
 `QUERY_SOURCES` is reachable. Results are capped at 200 rows per request.
+
+### Editing and deleting rows
+
+Admins additionally get **Edit** and **Delete** on each row; developers see the
+same table read-only. Both are enforced on the server, so hiding the buttons is
+only cosmetic.
+
+Only fields listed in a source's `editable` array can be changed — a request
+naming any other field is rejected, so computed columns like `task_count` and
+identity fields like `sub` cannot be written.
+
+Deleting a **video** cascades: its `pipeline1`, `pipeline2` and `comments` rows
+go too, along with any recordings those comments left in `uploads/`. Without
+that, removing a video from the dataset would strand its pipeline output and
+feedback in collections nothing can reach. The confirmation dialog names
+everything that will be removed.
+
+The `users` source is deliberately **not** deletable here. Accounts are managed
+at `/admin`, which owns the last-admin guard, and keeping that logic in one
+place means it can't be bypassed through the query interface.
 
 To expose a new collection or field, add it to `QUERY_SOURCES` in
 `backend/app.py` — the UI builds its dropdowns from `/api/query/schema`, so
