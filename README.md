@@ -2,9 +2,13 @@
 
 A web interface for the Humanoid Farming Pipeline — a research project at Middle Tennessee State University focused on converting farming demonstration videos into structured, robot-usable task sequences through multimodal AI.
 
-<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/557c52ff-9c29-414f-a070-d88740a80a1c" />
-<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/d088a832-f449-4194-ab86-c60792ee1cb5" />
-<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/40b6770a-939c-4fc4-8662-f2c8ca90a5f8" />
+<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/869bcbe8-870c-4217-83b1-140840fe67ef" />
+<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/4d44aadd-15d2-44c3-b51a-592d7d433c91" />
+<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/a34e93dc-6ada-4dbd-81a8-389f995657b6" />
+<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/f64cfe64-ffa0-406c-8dd7-733ecb650a8e" />
+<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/3424f966-33f3-4e11-9af9-1f9d4ed31704" />
+<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/7e76ab3a-0a42-429a-b51e-3804db6798f7" />
+<img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/daf9e29e-7a3d-40d1-a94d-9498235ded64" />
 
 ## Tech Stack
 
