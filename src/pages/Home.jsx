@@ -327,18 +327,6 @@ function Home() {
         </div>
       </div>
 
-      {/* about section */}
-      <div className='about-banner'>
-        <div className='headerText'>
-          <h2>About</h2>
-          <h3>The Humanoid Farming Pipeline is a research project at Middle Tennessee State University focused
-            on converting human farming demonstrations into structured task sequences that humanoid robots can
-            learn from.</h3>
-
-          <h3>By combining video processing, large language models, and multimodal AI, we aim to bridge the gap
-            between human agricultural knowledge and robotic execution in precision farming.</h3>
-        </div>
-      </div>
     </>
 
   );
