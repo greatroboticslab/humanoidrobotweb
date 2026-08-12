@@ -33,3 +33,6 @@ __pycache__/
 
 # comment recordings
 humanoidrobotweb/backend/uploads/
+
+# database dumps - contain user emails, and are transferred by hand
+mongo_dump/
