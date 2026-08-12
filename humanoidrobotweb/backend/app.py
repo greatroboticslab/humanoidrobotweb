@@ -30,7 +30,9 @@ ROLES = ("user", "developer", "admin")
 
 whisper_model = whisper.load_model("base")
 
-app = Flask(__name__)
+# static_folder=None disables flask's built-in /static route, which otherwise
+# shadows the catch-all below and 404s the compiled react bundle
+app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ["FLASK_SECRET_KEY"]
 app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=14),
@@ -960,6 +962,46 @@ def serve_upload(filename):
     return send_from_directory(UPLOAD_DIR, secure_filename(filename))
 
 
+# ---------------------------------------------------------------------------
+# Serving the built frontend
+#
+# In development React runs its own server on :3000 and proxies /api here, so
+# none of this is used. In production there is a single port, so Flask hands
+# out the compiled bundle as well as the API.
+# ---------------------------------------------------------------------------
+
+BUILD_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "build")
+)
+
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_frontend(path):
+    # an unmatched /api/... is a genuine 404, not a page. without this the
+    # catch-all would hand back index.html and the caller would try to parse
+    # HTML as JSON, which is a confusing way to discover a typo'd route.
+    if path.startswith("api/"):
+        return jsonify({"error": "Not found"}), 404
+
+    if not os.path.isdir(BUILD_DIR):
+        return (
+            "<h1>Frontend not built</h1>"
+            "<p>Run <code>npm run build</code> in the project root, "
+            "then reload.</p>",
+            501,
+        )
+
+    # real files (js, css, images) get served as themselves; everything else
+    # falls through to index.html so react router can handle the route
+    requested = os.path.join(BUILD_DIR, path)
+    if path and os.path.isfile(requested):
+        return send_from_directory(BUILD_DIR, path)
+
+    return send_from_directory(BUILD_DIR, "index.html")
+
+
 if __name__ == "__main__":
     load_data()
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=os.environ.get("FLASK_DEBUG", "1") == "1", host="127.0.0.1", port=port)
