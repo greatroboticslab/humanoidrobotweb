@@ -36,3 +36,4 @@ humanoidrobotweb/backend/uploads/
 
 # database dumps - contain user emails, and are transferred by hand
 mongo_dump/
+mongo_dump*.zip

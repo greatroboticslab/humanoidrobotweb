@@ -2,6 +2,12 @@
 
 A web interface for the Humanoid Farming Pipeline — a research project at Middle Tennessee State University focused on converting farming demonstration videos into structured, robot-usable task sequences through multimodal AI.
 
+**Live site:** https://endurance-cylinder-component.ngrok-free.dev
+
+Running on the lab server behind an ngrok tunnel. On the first visit ngrok shows an
+interstitial warning page — click **Visit Site** to continue. Sign-in is limited to
+addresses on the OAuth test-user list, so ask to be added if you need an account.
+
 <img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/869bcbe8-870c-4217-83b1-140840fe67ef" />
 <img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/4d44aadd-15d2-44c3-b51a-592d7d433c91" />
 <img width="1470" height="810" alt="image" src="https://github.com/user-attachments/assets/a34e93dc-6ada-4dbd-81a8-389f995657b6" />
@@ -138,6 +144,127 @@ bash mongo_transfer.sh export
 # copy mongo_dump/ to the other machine, then:
 bash mongo_transfer.sh import
 ```
+
+## Deploying to the Lab Server
+
+In development, React serves the frontend on :3000 and proxies `/api` to Flask on
+:5000. In production there is a single port: `npm run build` compiles the frontend
+and Flask serves those files alongside the API, with ngrok tunnelling to it.
+
+### 1. Environment
+
+The system Python and Node on the lab server are shared and out of date, so create
+a conda environment rather than installing anything globally.
+
+```bash
+conda create -n <yourname>-humanoid python=3.11 -y
+conda activate <yourname>-humanoid
+```
+
+The server's `/usr/bin/node` is v10, which is too old to build this project. Install
+a current Node **inside the environment**, leaving the system one untouched:
+
+```bash
+conda install -c conda-forge nodejs=20 -y
+hash -r          # bash caches command paths; without this it keeps using v10
+node --version   # expect v20.x
+```
+
+Then the Python dependencies:
+
+```bash
+pip install -r humanoidrobotweb/backend/requirements.txt
+```
+
+### 2. Configuration
+
+Both `.env` files are gitignored and must be created by hand.
+
+**Create these before building the frontend.** `REACT_APP_GOOGLE_CLIENT_ID` is
+compiled into the bundle at build time, so a build made without it produces a site
+where sign-in fails silently.
+
+`.env` in the project root:
+
+```
+REACT_APP_GOOGLE_CLIENT_ID=<client id>
+```
+
+Then derive the backend's copy from it and add the rest:
+
+```bash
+cd humanoidrobotweb/backend
+sed 's/^REACT_APP_//' ../../.env > .env
+python -c "import secrets;print('FLASK_SECRET_KEY='+secrets.token_hex(32))" >> .env
+echo "ADMIN_EMAILS=<admin addresses, comma separated>" >> .env
+echo "COOKIE_SECURE=1" >> .env
+```
+
+`COOKIE_SECURE=1` is correct behind ngrok, which terminates TLS.
+
+### 3. Build the frontend
+
+```bash
+cd /path/to/humanoidrobotweb && npm install && npm run build
+```
+
+### 4. Import the database
+
+The `videos` and `pipeline2` collections load automatically from `backend/data/` on
+first run. `pipeline1` is not in the repo and has to be migrated from a machine that
+already has it:
+
+```bash
+# on the source machine
+cd humanoidrobotweb/backend && bash mongo_transfer.sh export
+
+# copy mongo_dump/ across, then on the server
+bash mongo_transfer.sh import
+```
+
+Check the target server doesn't already have a `humanoidfarming` database in use
+before importing, since the restore drops collections before writing.
+
+### 5. Pick a free port
+
+The server is shared, so find a port nobody has claimed. Avoid 8888 (Jupyter), 8080,
+5000, 3000 and 27017 (MongoDB).
+
+```bash
+ss -tuln | grep 8420    # no output means it is free
+```
+
+### 6. Run it
+
+Use `tmux` so both processes survive disconnecting.
+
+```bash
+tmux new -s site
+```
+
+Flask in the first pane:
+
+```bash
+cd humanoidrobotweb/backend && PORT=8420 FLASK_DEBUG=0 python app.py
+```
+
+Split with `Ctrl+B` then `"`, and run ngrok in the second:
+
+```bash
+ngrok http --url=<your reserved domain> 8420
+```
+
+Detach with `Ctrl+B` then `d`. Both keep running. Reattach later with
+`tmux attach -t site`.
+
+### Google OAuth for a deployment
+
+The deployment's URL must be listed under **Authorized JavaScript origins** in the
+Google Cloud console, with `https://` and no trailing slash. Sign-in fails without
+it. Changes can take a few minutes to propagate.
+
+A reserved ngrok domain is worth setting up (free accounts get one) so the URL stays
+constant and this only has to be configured once.
 
 ## Authentication and Roles
 
