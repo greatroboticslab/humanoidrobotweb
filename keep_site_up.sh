@@ -47,20 +47,39 @@ ngrok_up() {
     | grep -q "$DOMAIN"
 }
 
+# set by ensure_session: the window these panes live in. found rather than
+# assumed, because a session made by hand has a default window name and index
+# that will not match anything we picked.
+WINDOW=""
+
 ensure_session() {
   if ! tmux has-session -t "$SESSION" 2>/dev/null; then
     log "no tmux session, creating '$SESSION'"
-    tmux new-session -d -s "$SESSION" -n main
-    tmux split-window -v -t "$SESSION:main"
+    tmux new-session -d -s "$SESSION"
+  fi
+
+  WINDOW=$(tmux list-windows -t "$SESSION" -F '#{window_index}' 2>/dev/null | head -1)
+  if [ -z "$WINDOW" ]; then
+    log "could not find a window in session '$SESSION'"
+    exit 1
+  fi
+
+  # a hand-made session has one pane; we need two, and sending keys to a pane
+  # that does not exist fails instead of doing nothing useful
+  local panes
+  panes=$(tmux list-panes -t "$SESSION:$WINDOW" 2>/dev/null | wc -l)
+  if [ "${panes:-0}" -lt 2 ]; then
+    log "window has $panes pane(s), splitting to make two"
+    tmux split-window -v -t "$SESSION:$WINDOW"
   fi
 }
 
 # pane 0 = flask, pane 1 = ngrok
 run_in_pane() {
   local pane="$1" cmd="$2"
-  tmux send-keys -t "$SESSION:main.$pane" C-c 2>/dev/null
+  tmux send-keys -t "$SESSION:$WINDOW.$pane" C-c 2>/dev/null
   sleep 2
-  tmux send-keys -t "$SESSION:main.$pane" "$cmd" C-m
+  tmux send-keys -t "$SESSION:$WINDOW.$pane" "$cmd" C-m
 }
 
 start_flask() {
