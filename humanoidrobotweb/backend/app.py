@@ -1004,4 +1004,7 @@ def serve_frontend(path):
 if __name__ == "__main__":
     load_data()
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=os.environ.get("FLASK_DEBUG", "1") == "1", host="127.0.0.1", port=port)
+    # debug defaults OFF: the werkzeug debugger allows running arbitrary code
+    # from the browser, so forgetting a flag should never expose it. opt in
+    # locally with FLASK_DEBUG=1 when you want auto-reload.
+    app.run(debug=os.environ.get("FLASK_DEBUG", "0") == "1", host="127.0.0.1", port=port)

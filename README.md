@@ -257,6 +257,50 @@ ngrok http --url=<your reserved domain> 8420
 Detach with `Ctrl+B` then `d`. Both keep running. Reattach later with
 `tmux attach -t site`.
 
+### Keeping it running
+
+`keep_site_up.sh` checks that Flask is answering and that the ngrok tunnel is
+connected, and restarts whichever is down. It is safe to run repeatedly — when
+everything is healthy it does nothing — and it recreates the tmux session if the
+server has rebooted.
+
+Edit the settings block at the top if paths, port or domain differ, then:
+
+```bash
+chmod +x keep_site_up.sh
+./keep_site_up.sh          # run once by hand to confirm it works
+cat watchdog.log
+```
+
+Then schedule it with `crontab -e`:
+
+```
+@reboot sleep 60 && /data/Zainab/humanoidrobotweb/keep_site_up.sh
+*/5 * * * * /data/Zainab/humanoidrobotweb/keep_site_up.sh
+```
+
+The `@reboot` line brings the site back after the machine restarts; the five
+minute check catches crashes and dropped tunnels. Actions are logged to
+`watchdog.log`.
+
+Because the site still runs inside tmux, `tmux attach -t site` works as before
+for watching the live output.
+
+**Restarting by hand**, if you ever need to:
+
+```bash
+tmux attach -t site
+# pane 0 (Ctrl+B, up arrow):
+cd humanoidrobotweb/backend && conda activate zainab-humanoid && PORT=8420 FLASK_DEBUG=0 python app.py
+# pane 1 (Ctrl+B, down arrow):
+conda activate zainab-humanoid && ngrok http --url=<domain> 8420
+# Ctrl+B then d to detach
+```
+
+`PORT` and `FLASK_DEBUG=0` are not optional. Without them Flask starts on port
+5000, which the tunnel is not pointing at, and with the debugger enabled on a
+publicly reachable URL.
+
 ### Google OAuth for a deployment
 
 The deployment's URL must be listed under **Authorized JavaScript origins** in the
