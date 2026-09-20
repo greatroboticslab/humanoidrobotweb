@@ -257,12 +257,48 @@ ngrok http --url=<your reserved domain> 8420
 Detach with `Ctrl+B` then `d`. Both keep running. Reattach later with
 `tmux attach -t site`.
 
-### Keeping it running
+### Keeping it running (watchdog)
 
-`keep_site_up.sh` checks that Flask is answering and that the ngrok tunnel is
-connected, and restarts whichever is down. It is safe to run repeatedly — when
-everything is healthy it does nothing — and it recreates the tmux session if the
-server has rebooted.
+The site runs as two processes inside a `tmux` session: Flask in one pane, the
+ngrok tunnel in the other. Either can stop — a crash, a dropped tunnel, or a
+server reboot, which kills both — and nothing would notice. `keep_site_up.sh`
+is what notices.
+
+**How it decides something is wrong.** Two checks, both against localhost:
+
+| Check | How | Meaning |
+|-------|-----|---------|
+| Backend | `GET /api/health` on the app's port | Flask is serving and MongoDB is reachable |
+| Tunnel | ngrok's local admin API on port 4040, looking for the domain | The tunnel is connected to ngrok's servers |
+
+`/api/health` exists specifically for this. It performs a MongoDB ping and
+nothing else — no aggregations, no collection scans — so polling it is
+effectively free. Checking `/api/stats` instead would work but does real
+analytical work on every call.
+
+**What it does about it.** If a check fails, the script sends the relevant
+start command to that tmux pane and re-checks after a pause (60s for Flask,
+which has to load the Whisper model; 10s for ngrok). If the tmux session is
+gone entirely, as it is after a reboot, it recreates the session and both panes
+first. Every action is appended to `watchdog.log` with a timestamp. When both
+checks pass it writes nothing and exits.
+
+**Why tmux rather than a background process:** the panes stay attachable, so
+`tmux attach -t site` still shows live output and full scrollback from both
+processes. That is the difference between diagnosing an outage and guessing.
+
+**Resource cost.** Two HTTP requests to localhost every five minutes, roughly
+290 runs a day. The script exits in well under a second when healthy, holds no
+state, and starts no long-running process of its own. It is not measurable
+against normal server load.
+
+**Startup behaviour.** Scheduled through cron rather than systemd, since the
+lab account has no root access. The `@reboot` entry covers machine restarts;
+the five-minute entry covers everything else.
+
+**Known limitation.** ngrok's free plan permits one agent at a time. If a
+tunnel is started anywhere else — a laptop, say — the server's is refused, and
+the watchdog cannot fix that. It says so explicitly in the log when it happens.
 
 Edit the settings block at the top if paths, port or domain differ, then:
 

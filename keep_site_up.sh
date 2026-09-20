@@ -36,8 +36,11 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S')  $*" >> "$LOG"; }
 # cron runs with a minimal PATH, so make sure tmux/curl/conda are reachable
 export PATH="/usr/local/bin:/usr/bin:/bin:/home/mtsu/miniconda3/condabin:$PATH"
 
+# /api/health is a mongo ping and nothing else. /api/stats would also prove the
+# app is alive but runs several aggregations and scans every pipeline1 document,
+# which is far too much work to repeat every five minutes.
 flask_up() {
-  curl -fsS --max-time 10 "http://127.0.0.1:$PORT/api/stats" >/dev/null 2>&1
+  curl -fsS --max-time 10 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1
 }
 
 # ngrok exposes a local admin api; if our domain shows up there, the tunnel

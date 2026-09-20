@@ -210,6 +210,24 @@ def auth_logout():
     return jsonify({"ok": True})
 
 
+@app.route("/api/health", methods=["GET"])
+def health():
+    """Liveness check for the watchdog.
+
+    Deliberately cheap. A mongo ping confirms the app is serving and the
+    database is reachable without touching any collection, so polling this
+    every few minutes costs nothing measurable. /api/stats would also work
+    but runs several aggregations and a scan of every pipeline1 document,
+    which is far too much work for a health check.
+    """
+    try:
+        client.admin.command("ping")
+    except Exception as e:
+        print(f"Health check failed: {e}")
+        return jsonify({"ok": False, "error": "database unreachable"}), 503
+    return jsonify({"ok": True})
+
+
 @app.route("/api/users", methods=["GET"])
 @require_role("admin")
 def list_users():
